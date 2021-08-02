@@ -11,6 +11,14 @@ import subprocess
 import pandas as pd
 import argparse
 
+try:
+    default_blender_path_file = open('blender_path.txt', 'r')
+    default_blender_path = default_blender_path_file.read()
+except Exception:
+    print('Not blender_path.txt file!')
+    default_blender_path = './blender-2.82a-linux64/blender'
+
+
 # Read the excel sheet
 data = pd.read_excel('GIWdata.xlsx')
 
@@ -18,7 +26,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--index', type=int, help='Select index from the excel sheet',default=35)
 parser.add_argument('--condition', type=str,help='Select run type: test, complete, blink',default= 'blink')
 parser.add_argument('--folder_name', type=str,help='Set folder name',default= 'test_trial')
-parser.add_argument('--path_to_blender', type=str,help='Set blender path',default= 'C:\Program Files\Blender Foundation\Blender 2.90\\blender.exe')
+parser.add_argument('--path_to_blender', type=str,help='Set blender path',default= default_blender_path)
 parser.add_argument('--frame_cap', type=int,help='Number of frames to render for blink-data. -1 means there is no limit',default=-1)
 
 

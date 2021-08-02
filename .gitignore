@@ -6,14 +6,17 @@ __pycache__/
 # C extensions
 *.so
 
+# default path
+blender_path.txt
+
 # renderings
 renderings/
 **/seq.blend*
-Textures/
-Textures_eye/
 
 # bulky data
 static_model/
+Textures/
+Textures_eye/
 
 # blender
 blender-2.82a-linux64/

@@ -1344,12 +1344,14 @@ def blink_render():
     bpy.data.objects["EyeWet.002"].scale = bpy.data.objects["EyeWet.002"].scale * 1.02
 
     # unparents the lights and fixes their positions for blender coordinates
-    l1.parent = None
-    l2.parent = None
-    l1.location = [ l1.location[0], l1.location[2], -l1.location[1] ]
-    l2.location = [ l2.location[0], l2.location[2], -l2.location[1] ]
-    l1.rotation_euler[0] = math.pi/2
-    l2.rotation_euler[0] = math.pi/2
+    # l1.parent = None
+    # l2.parent = None
+    # l1.location = [ l1.location[0], l1.location[2], -l1.location[1] ]
+    # l2.location = [ l2.location[0], l2.location[2], -l2.location[1] ]
+    # l1.rotation_euler[0] = math.pi/2
+    # l2.rotation_euler[0] = math.pi/2
+    l1.location[1] = -l1.location[1]
+    l2.location[1] = -l2.location[1]
 
     # sets the head location androtation
     cam_loc = [args.camera_distance[0], args.camera_distance[1], args.camera_distance[2]]
