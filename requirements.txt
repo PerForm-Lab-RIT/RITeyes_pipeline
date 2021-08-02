@@ -1,0 +1,6 @@
+numpy
+argparse  
+xlrd
+mathutils
+bpy
+

@@ -1,0 +1,4 @@
+C:\Program Files\Blender Foundation\Blender 2.90\blender.exe
+
+conda activate RITEyes
+python rendering_script.py --index 0 --path_to_blender 'C:\Program Files\Blender Foundation\Blender 2.90\blender.exe'
