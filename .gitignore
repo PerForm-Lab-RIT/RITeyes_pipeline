@@ -15,9 +15,6 @@ Textures_eye/
 # bulky data
 static_model/
 
-# catastrophic error causer
-#**/~$GIWdata.xlsx
-
 # blender
 blender-2.82a-linux64/
 
