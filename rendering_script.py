@@ -10,6 +10,7 @@ import msgpack
 import json
 import file_methods
 import os
+from os import walk
 import subprocess
 import pandas as pd
 import argparse
@@ -144,21 +145,26 @@ if args.type == 'seq':
             final_eye1_pos.append(raw_pupil_data['sphere_center_z'][i]/10)
         i -= 1
 
-    filepath = default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/calibrations/ManualCalibration-21524841-d3cc-423d-b0ec-068c682fb15f.plcal'
-    with open(filepath, "rb") as data_file:
+
+    # gest the calibration data
+    filepath = default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/calibrations/'
+    f = []
+    for (dirpath, dirnames, filenames) in walk(filepath):
+        f.extend(filenames)
+        break
+    calib_filename = f.pop()
+    while calib_filename[:3] == 'Def' and len(f) > 0:
+        calib_filename = f.pop()
+    with open(filepath+calib_filename, "rb") as data_file:
         byte_data = data_file.read()
 
     calibration_data = msgpack.unpackb(byte_data, use_list=False, strict_map_key=False)
-
     # print (calibration_data)
 
     lm_mat = calibration_data['data']['calib_params']['left_model']['eye_camera_to_world_matrix']
     rm_mat = calibration_data['data']['calib_params']['right_model']['eye_camera_to_world_matrix']
-    bm_mat0 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix0']
-    bm_mat1 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix1']
-
-    # lm_mat = bm_mat0
-    # rm_mat = bm_mat1
+    # bm_mat0 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix0']
+    # bm_mat1 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix1']
 
     # get eye 1 position in world space
     eye1_world = []
@@ -186,7 +192,7 @@ if args.type == 'seq':
     print()
     print('Eye1 local:      '+str(final_eye1_pos))
     print('Eye1 world:      '+str(eye1_world))
-    print('Eye loc:         '+str(final_eye0_pos))
+    print('Eye0 local:      '+str(final_eye0_pos))
     print('Other Eye loc:   '+str(eye1_loc))
     print('Delta eye:       '+str(eye_delta))
     print()
@@ -258,11 +264,8 @@ if args.type == 'seq':
     print(distance)
 
     inputfile="./GIW_Data/giw_"+args.condition 
-    if args.condition=='blink':
-        blend_file=args.head_model+'_v9-pupil.blend'
-    else:
-        blend_file=args.head_model+'_v6-pupil.blend'
-        
+    blend_file=args.head_model+'_v9-pupil.blend'
+    
     if True:
         subprocess.call([args.path_to_blender,'-b','static_model/'+args.head_model+'/'+blend_file,
                     '-P','RIT-Eyes_sequential_render.py','--',

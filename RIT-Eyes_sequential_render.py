@@ -1322,7 +1322,7 @@ def blink_render():
 #     pupil = [float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]
     #endregion 
 
-#     file = pickle.load(open(os.path.join(inp, p), "rb"), encoding="latin1")
+    # file = pickle.load(open(os.path.join(inp, p), "rb"), encoding="latin1")
 
     # Pupil player export data
     export_data = pickle.load(open(args.picklefile +str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'rb'), encoding='latin1')
