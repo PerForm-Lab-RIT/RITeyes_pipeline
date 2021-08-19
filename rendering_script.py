@@ -75,7 +75,6 @@ if args.type == 'seq':
     # reads the files we need to build the data pickle file for the blender script
     raw_pupil_data = pd.read_csv(default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/exports/pupil_positions.csv')
     timestamps = np.load(default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/eye0_timestamps.npy')
-    
     # print(raw_pupil_data.keys())
     
     # create the data we need

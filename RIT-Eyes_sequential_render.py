@@ -1961,11 +1961,6 @@ def example_render():
             write_still=True)
 
 
-        
-
-
-
-
 def main():
     if args.data_source == 'pickle':
         print('LOADING DATAFROM GIVEN PICKLE FILE')
