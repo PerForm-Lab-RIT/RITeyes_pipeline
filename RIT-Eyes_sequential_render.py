@@ -52,6 +52,7 @@ parser.add_argument('--start', type=str,help='start frame',default='1' )
 parser.add_argument('--end', type=str,help='end frame',default='10000') # While sequential rendering if you need a specific portion of the video to rendered you can specify the start and end index
 parser.add_argument('--gpu', type=str,help='GPU ids to use',default='0,1,2,3')
 parser.add_argument('--output_file', type=str,help='Please make sure that there are duplicates',default='mark2')
+parser.add_argument('--picklefile', type=str, help='Location of the data file', default='E:\RITEyes\Raw Data')
 
 #########################################################################################################################################################################
 # Define control parameters
@@ -1324,7 +1325,7 @@ def blink_render():
 #     file = pickle.load(open(os.path.join(inp, p), "rb"), encoding="latin1")
 
     # Pupil player export data
-    export_data = pickle.load(open('D:/Raw Eye Data/'+str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'rb'), encoding='latin1')
+    export_data = pickle.load(open(args.picklefile +str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'rb'), encoding='latin1')
     
     pupil = export_data['pupil']
     pupil = [float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]

@@ -73,9 +73,8 @@ if args.type == 'seq':
     camera_azimuthal =  '0'
 
     # reads the files we need to build the data pickle file for the blender script
-    raw_pupil_data = pd.read_csv(default_data_path+str(args.person_idx)+'/'+str(args.trial_idx)+'/exports/pupil_positions.csv')
-    timestamps = np.load(default_data_path+str(args.person_idx)+'/'+str(args.trial_idx)+'/eye0_timestamps.npy')
-    
+    raw_pupil_data = pd.read_csv(default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/exports/pupil_positions.csv')
+    timestamps = np.load(default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/eye0_timestamps.npy')
     # print(raw_pupil_data.keys())
     
     # create the data we need
@@ -145,7 +144,7 @@ if args.type == 'seq':
             final_eye1_pos.append(raw_pupil_data['sphere_center_z'][i]/10)
         i -= 1
 
-    filepath = default_data_path+str(args.person_idx)+'/'+str(args.trial_idx)+'/calibrations/Manual_Calibration-bc36e35a-2e42-4ec0-87b9-caf0d12caff7.plcal'
+    filepath = default_data_path +str(args.person_idx)+'/'+str(args.trial_idx)+'/calibrations/ManualCalibration-21524841-d3cc-423d-b0ec-068c682fb15f.plcal'
     with open(filepath, "rb") as data_file:
         byte_data = data_file.read()
 
@@ -260,7 +259,7 @@ if args.type == 'seq':
 
     inputfile="./GIW_Data/giw_"+args.condition 
     if args.condition=='blink':
-        blend_file=args.head_model+'_v8-pupil.blend'
+        blend_file=args.head_model+'_v9-pupil.blend'
     else:
         blend_file=args.head_model+'_v6-pupil.blend'
         
@@ -294,6 +293,7 @@ if args.type == 'seq':
                     '--no_reflection','1',
                     '--env','0',
                     '--output_file',filename,
+					'--picklefile', default_data_path,
                     '--frame_cap',str(args.frame_cap),
                     '--index','0'])
 
