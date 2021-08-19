@@ -10,7 +10,7 @@ __pycache__/
 blender_path.txt
 
 # renderings
-renderings/
+*renderings/
 **/seq.blend*
 
 # bulky data
