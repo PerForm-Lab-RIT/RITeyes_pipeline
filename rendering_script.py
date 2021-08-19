@@ -26,6 +26,14 @@ except Exception:
     print('Not blender_path.txt file!')
     default_blender_path = './blender-2.82a-linux64/blender'
 
+    
+try:
+    default_blender_path_file = open('data_path.txt', 'r')
+    default_blender_path = default_blender_path_file.read()
+except Exception:
+    print('Not data_path.txt file!')
+    default_data_path = 'D:/Raw Eye Data/'
+
 
 # Read the excel sheet
 # data = pd.read_excel('GIWdata.xlsx')
@@ -104,14 +112,14 @@ if args.type == 'seq':
 
         # pupil position
         norm = []
-        norm.append(float(raw_pupil_data['circle_3d_normal_x'][i]))
+        norm.append(float(raw_pupil_data['circle_3d_normal_x'][i])) # make this negative for binocular left eye
         norm.append(float(raw_pupil_data['circle_3d_normal_z'][i]))
         norm.append(float(raw_pupil_data['circle_3d_normal_y'][i]))
         pupil_normal.append(norm)
 
         # eye location 
         loc = []
-        loc.append(float(raw_pupil_data['sphere_center_x'][i])/10)
+        loc.append(float(raw_pupil_data['sphere_center_x'][i])/10) # make this negative for binocular left eye
         loc.append(float(raw_pupil_data['sphere_center_z'][i])/10)
         loc.append(float(raw_pupil_data['sphere_center_y'][i])/10)
         eye_loc.append(loc)
@@ -241,7 +249,7 @@ if args.type == 'seq':
         'eye_delta'     : eye_delta
     }
 
-    with open('D:/Raw Eye Data/'+str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'wb') as handle:
+    with open(default_data_path+str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'wb') as handle:
         pickle.dump(pickle_data, handle, protocol=pickle.DEFAULT_PROTOCOL)
 
 

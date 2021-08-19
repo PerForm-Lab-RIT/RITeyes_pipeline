@@ -8,6 +8,7 @@ __pycache__/
 
 # default path
 blender_path.txt
+data_path.txt
 
 # renderings
 *renderings/
