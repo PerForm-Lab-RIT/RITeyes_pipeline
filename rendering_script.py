@@ -67,10 +67,12 @@ if args.type == 'seq':
     print('Person: '+ str(args.person_idx))
     print('Trial: '+ str(args.trial_idx))
 
+    # camera should never rotate
     camera_elevation =  '0'
     camera_roll =       '0'
     camera_azimuthal =  '0'
 
+    # reads the files we need to build the data pickle file for the blender script
     raw_pupil_data = pd.read_csv('D:/Raw Eye Data/'+str(args.person_idx)+'/'+str(args.trial_idx)+'/exports/pupil_positions.csv')
     timestamps = np.load('D:/Raw Eye Data/'+str(args.person_idx)+'/'+str(args.trial_idx)+'/eye0_timestamps.npy')
     
@@ -92,10 +94,10 @@ if args.type == 'seq':
     if (args.frame_cap != -1):
         frame_cap = min(frame_cap, args.frame_cap)
     
+    # loop through the files an gather data
     i = 0
     skip = 0
     for f in range(frame_cap):
-
         # skips over the data we don't want
         while True:
             timestamp = timestamps[(f+skip)*args.delta]
