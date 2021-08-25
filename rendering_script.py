@@ -18,6 +18,7 @@ import csv
 import pickle
 import numpy as np
 import math
+import sys
 
 
 try:
@@ -316,7 +317,20 @@ if args.type == 'example':
         #             '--data_source','example','--light_1_loc',',-1,1,0','--light_2_loc',',-1,0.5,0',
         #             '--light_1_energy','100','--light_2_energy','100'])
 
+# Start by binocular mode
+if args.type == 'binocular':
 
+	blend_file = str(args.head_model) + '_v9-pupil.blend'
+	subprocess.call([
+		args.path_to_blender, 
+		'-b', 
+		os.path.join('static_model', str(args.head_model) ,blend_file), 
+
+		'--python-use-system-env',
+		'-P', 'RIT-Eyes_full_binocular_System.py',
+		'--',
+		'--model_id', '1', '--person_idx', '14', '--trial_idx', '1'
+		])
 
 
 # eye_elevation = '-30,30'
