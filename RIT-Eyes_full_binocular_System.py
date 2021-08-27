@@ -1,5 +1,5 @@
 '''
-Suppliment Library for constructing full binocular system for RIT-Eyes
+Script for constructing full binocular system for RIT-Eyes
 
 @author: Chengyi Ma
 '''
@@ -7,28 +7,31 @@ import os
 import sys
 #sys.path.append("C:\\Users\\mcy13\\anaconda3\\envs\\RITEyes\\Lib")
 #os.environ['PYTHONPATH'] = "C:\Python39"
-print("PYTHONPATH: ", os.environ['PYTHONPATH'])
-import bpy
 import argparse
 import pandas as pd
 import numpy as np
+import subprocess
 
 ####	Initialize section starts 	####
 ## Decide on what to import on start up.
 ## First, need to understand how the environment works.
 
 ## Handle arguments:
-argv = sys.argv
+
+# for debug
+print("sys.argv before", sys.argv)
+
 if '--' in sys.argv:
     argv = sys.argv[sys.argv.index('--') + 1:]
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_id", type= int, help='Choose a head model (1-24)', default=1)
 parser.add_argument("--person_idx", type=int, help='Person index in the GIW Data folder', default=0)
 parser.add_argument('--trial_idx', type=int, help='Trial index in the GIW Data folder', default=0)
 
-args = parser.parse_args()
+args = parser.parse_args(argv)
 
-## Global Variables Start
+## Global Variables Starts  ##
 default_data_path = "" 		# Where all person data rest
 data_directory = "" 		# Where the data rest for a particualr person_idx and trial_idx
 model_id = args.model_id
@@ -38,7 +41,32 @@ trial_idx = args.trial_idx
 gaze_data:pd.DataFrame = None
 eye_locations = [] # a list of two sub_lists [[eye0x, eye0y, eye0z], [eye1x, eye1y, eye1z]]
 
-## Global Varaiables End
+
+## Global Varaiables Ends   ##
+
+#### Blender Initialization Starts ####
+isBlenderProcess = False
+blender_path = "./blender-2.93.3-linux-x64/blender"
+
+try:
+    import bpy
+    isBlenderProcess = True
+except ModuleNotFoundError:
+    print("Blender not detected, starting Blender now")
+    subprocess.call([
+        blender_path, 
+        '-b',
+        '--python','RIT-Eyes_full_binocular_System.py',
+        '--',
+        '--model_id',
+        str(args.model_id)
+        ])
+    sys.exit()
+
+print("isBlenderProcess", isBlenderProcess)
+
+
+#### Blender Initialization Ends ####
 
 ## Initialize Functions Start
 def getDataPath():
@@ -137,14 +165,23 @@ def printArgs() -> None:
 	print(args)
 
 ## Initialize Functions Ends
+
 getDataPath()
 data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx))
 readGazeData(data_directory)
 eye_locations = getEyelocations(gaze_data)
 
 ####	Initialize section ends 	####
-## Blender Scene Edit Starts
 
-print(bpy.app.version_string)
+####	Blender Scene Edit Starts	####
 
-## Blender Scene Edit Ends
+def openBlenderFile():
+	if args.model_id != 0:
+		bpy.ops.wm.open_mainfile(filepath=os.path.join("static_model",str(args.model_id),str(args.model_id)+"_v9-pupil.blend"))
+
+
+openBlenderFile()
+print(bpy.data.objects)
+
+
+#### Blender Scene Edit Ends		####
