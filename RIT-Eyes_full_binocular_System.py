@@ -46,7 +46,8 @@ eye_locations = [] # a list of two sub_lists [[eye0x, eye0y, eye0z], [eye1x, eye
 
 #### Blender Initialization Starts ####
 isBlenderProcess = False
-blender_path = "./blender-2.93.3-linux-x64/blender"
+#blender_path = "./blender-2.93.3-linux-x64/blender"
+blender_path = "D:/Softwares/Blender/blender.exe"
 
 try:
     import bpy
@@ -215,6 +216,7 @@ bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
 
 
 ## Blender Operations
+bpy.ops.object.select_all(action="DESELECT")
 selectObjectHierarchy(Eye0)
 bpy.ops.object.duplicate()
 bpy.ops.object.select_all(action="DESELECT")
