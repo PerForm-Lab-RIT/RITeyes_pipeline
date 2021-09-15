@@ -12,6 +12,9 @@ import pandas as pd
 import numpy as np
 import subprocess
 import math
+import msgpack
+import json
+import cv2
 
 ####    Initialize section starts   ####
 ## Decide on what to import on start up.
@@ -42,6 +45,9 @@ trial_idx = args.trial_idx
 gaze_data:pd.DataFrame = None
 gaze_data_dictList = None
 
+frame_cap = 0 # the last world video frame index
+total_frames = 0 # the total world video's frame number
+
 
 ## Global Varaiables Ends   ##
 
@@ -49,6 +55,7 @@ gaze_data_dictList = None
 isBlenderProcess = False
 #blender_path = "./blender-2.93.3-linux-x64/blender"
 blender_path = "D:/Softwares/Blender/blender.exe"
+#blender_path = "/media/renderings/New Volume/RITEyes/blender-2.93.3-linux-x64/blender"
 
 try:
 	import bpy
@@ -140,6 +147,29 @@ def getHighestConfidenceFrame(gaze_data_dictList:dict) -> dict:
 def printArgs() -> None:
 	''' For debug, print input arguments '''
 	print(args)
+
+def readCalibData() -> list:
+	'''
+	Read calibration data file for camera matrices
+	'''
+	calib_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx), "calibrations")
+	calib_file_list = os.listdir(calib_directory)
+	calib_file_name = calib_file_list[0] # assume that there is only one file
+	calib_file_path = os.path.join(calib_directory, calib_file_name)
+
+	with open(calib_file_path, "rb") as calib_file:
+		calib_byte_data= calib_file.read()
+
+	calib_data_loaded = msgpack.unpackb(calib_byte_data, use_list=False, strict_map_key=False)
+	json_str = json.dumps(calib_data_loaded, indent = 4)
+	jsonfile = json.loads(json_str)
+
+	camera0_matrix = jsonfile["data"]["calib_params"]["binocular_model"]["eye_camera_to_world_matrix0"]
+	camera1_matrix = jsonfile["data"]["calib_params"]["binocular_model"]["eye_camera_to_world_matrix1"]
+
+	return [camera0_matrix, camera1_matrix]
+
+
 
 ## Initialize Functions Ends
 
@@ -274,6 +304,7 @@ print("Framecap: ", frame_cap)
 ## print(pd.isna(frameDictListsByWorldIndex[0][1]["eye_center1_3d_x"])) # See if a value is missing as nan
 #print(findBestFrameData(2, frameDictListsByWorldIndex)) # for debug, testing frameDictListsByWorldIndex
 
+camera_matrices = readCalibData() # get camera pos and rotation information
 
 
 ####	Data Processing Ends 	####
@@ -351,7 +382,97 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 		Eye1.keyframe_insert(data_path="rotation_euler", frame=frame_index)
 	print("Completed setting eye frames.")
 
+def add_view_vector():
+	'''
+	An optional feature, add a blender curve in the position of the eyeball model to observe the gaze direction.
+	Do this before copying Eye0
+	'''
+	bpy.ops.object.select_all(action="DESELECT")
+	bpy.ops.curve.primitive_nurbs_path_add(radius=100, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1), rotation=(0, 0, 0))
+	# bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
+	eye_vector = bpy.data.objects['NurbsPath']
+	eye_vector.parent = Eye0
+	eye_vector.rotation_euler[1] = math.radians(90)
+	eye_vector.location[2] = 100
+	bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
+	bpy.ops.object.select_all(action="DESELECT")
 
+def getFullRotationVector(rod_vector):
+	'''
+	Convert a 3-number rotation vector from cv2.rodrigues to a full angle-axis rotation vector.
+	'''
+	theta = math.sqrt(math.pow(rod_vector[0], 2) + math.pow(rod_vector[1], 2) + math.pow(rod_vector[2], 2))
+	unit_vector = [rod_vector[0][0]/theta, rod_vector[1][0]/theta, rod_vector[2][0]/theta]
+
+	return np.asarray([theta, unit_vector[0], unit_vector[1], unit_vector[2]])
+
+def setEyeCameras(camera_matrices):
+	'''
+	Set eye camera based on camera_matrices:
+	'''
+	# set camera 0
+	camera0_matrix = camera_matrices[0]
+	camera0_matrix = np.asarray(camera0_matrix)
+	camera0_rotation_matrix = camera0_matrix[:3, :3]
+	camera0_rotation_vector = cv2.Rodrigues(camera0_rotation_matrix)[0]
+	camera0_fullRotVector = getFullRotationVector(camera0_rotation_vector)
+	print("Camera0 full rotation vector: ", camera0_fullRotVector)
+
+	# Test using rotation matrix instead
+	camera0_rotation = np.array([0, 1, 0])
+	camera0_rotation = np.matmul(camera0_rotation_matrix, camera0_rotation)
+	print("Camera 0 rotation: ", camera0_rotation)
+
+	#print("Eye camera0 rotation vector: ", camera0_rotation_vector)
+	camera0_translation_vector = camera0_matrix[:3, 3]
+	print("Eye camera0 translation vector:", camera0_translation_vector)
+	# Add camera with data
+	bpy.ops.object.camera_add(
+		enter_editmode=False, 
+		align='VIEW', 
+		location=(camera0_translation_vector[0] * 0.1, camera0_translation_vector[1] * 0.1, camera0_translation_vector[2] * 0.1), 
+		rotation=(0, 0, 0), 
+		scale=(0.01, 0.01, 0.01)
+		)
+	camera0 = bpy.data.objects["Camera"]
+	camera0.name = "Camera0"
+	camera0.scale[0] = 0.01
+	camera0.scale[1] = 0.01
+	camera0.scale[2] = 0.01
+
+	# Set camera rotation
+	camera0.rotation_mode = 'AXIS_ANGLE'
+	camera0.rotation_axis_angle = camera0_fullRotVector
+
+
+
+	# set camera 1
+	camera1_matrix = camera_matrices[1]
+	camera1_matrix = np.asarray(camera1_matrix)
+	camera1_rotation_matrix = camera1_matrix[:3, :3]
+	camera1_rotation_vector = cv2.Rodrigues(camera1_rotation_matrix)[0]
+	camera1_fullRotVector = getFullRotationVector(camera1_rotation_vector)
+	print("Camera1 full rotation vector: ", camera1_fullRotVector)
+
+	camera1_translation_vector = camera1_matrix[:3, 3]
+	print("Eye camera1 translation vector:", camera1_translation_vector)
+	# Add camera with data
+	bpy.ops.object.camera_add(
+		enter_editmode=False, 
+		align='VIEW', 
+		location=(camera1_translation_vector[0] * 0.1, camera1_translation_vector[1] * 0.1, camera1_translation_vector[2] * 0.1), 
+		rotation=(camera1_rotation_vector[0], camera1_rotation_vector[1], camera1_rotation_vector[2]), 
+		scale=(0.01, 0.01, 0.01)
+		)
+	camera1 = bpy.data.objects["Camera"]
+	camera1.name = "Camera1"
+	camera1.scale[0] = 0.01
+	camera1.scale[1] = 0.01
+	camera1.scale[2] = 0.01
+
+	# set camera rotation
+	camera1.rotation_mode = 'AXIS_ANGLE'
+	camera1.rotation_axis_angle = camera1_fullRotVector
 
 ## Start Blender
 openBlenderFile()
@@ -367,6 +488,18 @@ bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
 
 
 ## Blender Operations
+
+# (Optional) Add a view vector
+add_view_vector()
+
+# Rename Scene Camera
+scene_camera = bpy.data.objects["Camera"]
+scene_camera.name = "SceneCamera"
+
+# Add Eye Cameras
+setEyeCameras(camera_matrices)
+
+# Copy Eye0 to get a Eye1
 bpy.ops.object.select_all(action="DESELECT")
 selectObjectHierarchy(Eye0)
 bpy.ops.object.duplicate()
@@ -378,6 +511,35 @@ hideObjectHierarchy(Armature)
 
 # Position two Eyes, Revising, To be finished
 setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
+
+# Add a reference video plane
+# Creating the plane
+bpy.ops.mesh.primitive_plane_add(size=20, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+video_plane = bpy.data.objects["Plane"]
+video_plane.scale[0] = 1.6
+video_plane.scale[1] = 0.9
+video_plane.location[2] = 40 # testing value
+# set up video material
+bpy.ops.material.new() # create new material
+video_material = bpy.data.materials['Material']
+video_material.name = "Video Material"
+default_BSDF = video_material.node_tree.nodes['Principled BSDF']
+# apply material to plane
+video_plane.active_material = video_material
+# remove default_BSDF
+video_material.node_tree.nodes.remove(default_BSDF)
+# add image texture node
+image_node = video_material.node_tree.nodes.new('ShaderNodeTexImage')
+world_video_path = os.path.join(data_directory, 'world.mp4')
+world_video = bpy.data.images.load(world_video_path)
+image_node.image = world_video
+# Link nodes
+materialOut_node = video_material.node_tree.nodes['Material Output']
+video_material.node_tree.links.new( materialOut_node.inputs['Surface'], image_node.outputs['Color'])
+# Set video node variables:
+image_node.image_user.frame_duration = frame_cap
+image_node.image_user.use_auto_refresh = True
+
 
 # temporarily save to a file
 bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
