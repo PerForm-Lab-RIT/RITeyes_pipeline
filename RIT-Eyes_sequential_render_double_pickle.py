@@ -1289,10 +1289,10 @@ def blink_render():
 #         e_z= []
 #         u_x= []
 #         u_y= []
-#         u_z= []
+        # u_z= []
 #         l_x= []
 #         l_y= []
-#         l_z= []
+        # l_z= []
 #         pupil = []
 #         for x in range(min(int(args.number),len(file['pupil_center_axis'][0]))):
 
@@ -1301,10 +1301,10 @@ def blink_render():
 #             e_z.append(file['pupil_center_axis'][2][x])
 #             u_x.append(file['top_center_axis'][0][x])
 #             u_y.append(file['top_center_axis'][1][x])
-#             u_z.append(file['top_center_axis'][2][x])
+            # u_z.append(file['top_center_axis'][2][x])
 #             l_x.append(file['bottom_center_axis'][0][x])
 #             l_y.append(file['bottom_center_axis'][1][x])
-#             l_z.append(file['bottom_center_axis'][2][x])
+            # l_z.append(file['bottom_center_axis'][2][x])
 #             pupil.append(file['pupil'][x])
 
 #     e_x = [float(x) for x in e_x]
@@ -1313,10 +1313,10 @@ def blink_render():
 #     e_z = [float(x) for x in e_z]
 #     u_x = [float(x) for x in u_x]
 #     u_y = [float(x) for x in u_y]
-#     u_z = [float(x) for x in u_z]
+    # u_z = [float(x) for x in u_z]
 #     l_x = [float(x) for x in l_x]
 #     l_y = [float(x) for x in l_y]
-#     l_z = [float(x) for x in l_z]
+    # l_z = [float(x) for x in l_z]
 
 #     # Calculating the pupil size in blender format
 #     pupil = [float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]
@@ -1324,9 +1324,15 @@ def blink_render():
 
     # file = pickle.load(open(os.path.join(inp, p), "rb"), encoding="latin1")
 
+
     # Pupil player export data
     export_data = pickle.load(open(args.picklefile +str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'rb'), encoding='latin1')
     
+    u_z = export_data['top_center_axis'][2]
+    l_z = export_data['bottom_center_axis'][2]
+    u_z = [float(x) for x in u_z]
+    l_z = [float(x) for x in l_z]
+
     pupil = export_data['pupil']
     pupil = [float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]
 
@@ -1506,8 +1512,8 @@ def blink_render():
         other_eye.keyframe_insert(data_path="rotation_euler", frame=x)
         other_eye.keyframe_insert(data_path="location", frame=x)
 
-        # upper_blink= math.radians(upper_org[0] - u_z[x])
-        # lower_blink= math.radians(-lower_org[0] + l_z[x])
+        upper_blink= math.radians(upper_org[0] - u_z[x])
+        lower_blink= math.radians(-lower_org[0] + l_z[x])
 
         #print ('Blink',math.degrees(upper_blink),math.degrees(lower_blink),(upper_org[0] - u_z[x]),lower_org[0] - l_z[x])
 

@@ -115,78 +115,74 @@ if args.type == 'seq':
     if (args.frame_cap != -1):
         frame_cap = min(frame_cap, args.frame_cap)
     
+    print()
+    print('BLINK LOAD')
+    blink_pickle = pickle.load(open('D:/RITeyes_pipeline/GIW_Data/giw_blink/PrIdx_11_TrIdx_1.p', 'rb'))
+    print(blink_pickle.keys())
+    print('BLINK DONE')
+    print()
+    
     # loop through the files an gather data
     i = 0
     skip = 0
     for f in range(frame_cap):
         # skips over the data we don't want
         while True:
-            timestamp = timestamps[(f+skip+args.start_frame)*args.delta]
-            while (i < len(raw_pupil_data['pupil_timestamp']) and (float(raw_pupil_data['pupil_timestamp'][i]) < timestamp or raw_pupil_data['eye_id'][i] != args.eye_idx or raw_pupil_data['method'][i] == '2d c++')):
+            timestamp = timestamps[int(blink_pickle['frame_no'][f])]
+            while i < len(raw_pupil_data['timestamp']) and (float(raw_pupil_data['timestamp'][i]) < timestamp or raw_pupil_data['id'][i] != args.eye_idx):
                 i += 1
-            if i < len(raw_pupil_data['pupil_timestamp']) and (float(raw_pupil_data['confidence'][i]) < 0.8 or math.isnan(float(raw_pupil_data['sphere_center_z'][i])) or float(raw_pupil_data['sphere_center_z'][i]) < 30 or float(raw_pupil_data['sphere_center_z'][i]) > 100):
-                skip += 1
-            else:
-                break
+            # if i < len(raw_pupil_data['timestamp']) and (float(raw_pupil_data['confidence'][i]) < 0.8 or math.isnan(float(raw_pupil_data['sphere_center_z'][i])) or float(raw_pupil_data['sphere_center_z'][i]) < 30 or float(raw_pupil_data['sphere_center_z'][i]) > 100):
+            #     skip += 1
+            # else:
+            break
 
         # ends the loop if it is out of range
-        if i >= len(raw_pupil_data['pupil_timestamp']):
+        if i >= len(raw_pupil_data['timestamp']):
             break
             
-        j = 1
-        while True:
-            if raw_pupil_data['eye_id'][i+j] != args.eye_idx and raw_pupil_data['method'][i+j] != '2d c++':
-                other_norm = []
-                other_norm.append(float(raw_pupil_data['circle_3d_normal_x'][i])) # make this negative for binocular left eye
-                other_norm.append(float(raw_pupil_data['circle_3d_normal_z'][i]))
-                other_norm.append(float(raw_pupil_data['circle_3d_normal_y'][i]))
-                other_pupil_normal.append(other_norm)
-                break
-            elif j > 3:
-                other_norm = [0,0,-1]
-                other_pupil_normal.append(other_norm)
-                break
-            j+=1
-
+        if raw_pupil_data['id'][i+1] != args.eye_idx:
+            other_norm = []
+            other_norm.append(float(raw_pupil_data['circle_3d_normal_x'][i])) # make this negative for binocular left eye
+            other_norm.append(float(raw_pupil_data['circle_3d_normal_z'][i]))
+            other_norm.append(float(raw_pupil_data['circle_3d_normal_y'][i]))
+            other_pupil_normal.append(other_norm)
+        else:
+            other_norm = [0,0,-1]
+            other_pupil_normal.append(other_norm)
+            
 
         # frame number
-        frame.append((f+skip+args.start_frame)*args.delta)
-        time_ms.append(float(raw_pupil_data['pupil_timestamp'][i])*1000)
+        frame.append(int(blink_pickle['frame_no'][f]))
+        time_ms.append(float(raw_pupil_data['timestamp'][i])*1000)
 
         # pupil position
         norm = []
         norm.append(float(raw_pupil_data['circle_3d_normal_x'][i])) # make this negative for binocular left eye
         norm.append(float(raw_pupil_data['circle_3d_normal_z'][i]))
-        if args.eye_idx == 0:
-            norm.append(float(raw_pupil_data['circle_3d_normal_y'][i]))
-        else:
-            norm.append(float(raw_pupil_data['circle_3d_normal_y'][i])*-1)
+        norm.append(float(raw_pupil_data['circle_3d_normal_y'][i]))
         pupil_normal.append(norm)
 
         # eye location 
         loc = []
         loc.append(float(raw_pupil_data['sphere_center_x'][i])/10) # make this negative for binocular left eye
         loc.append(float(raw_pupil_data['sphere_center_z'][i])/10)
-        if args.eye_idx == 0:
-            loc.append(float(raw_pupil_data['sphere_center_y'][i])/10)
-        else:
-            loc.append(float(raw_pupil_data['sphere_center_y'][i])/10*-1)
+        loc.append(float(raw_pupil_data['sphere_center_y'][i])/10)
         eye_loc.append(loc)
 
         # pupil dialation
         pupil.append(float(raw_pupil_data['diameter_3d'][i]))
-        print('Frame: '+str(len(frame)) + '   \tTimestamp: '+str(raw_pupil_data['pupil_timestamp'][i]))
+        print('Frame: '+str(len(frame)) + '   \tTimestamp: '+str(raw_pupil_data['timestamp'][i]))
 
     # gets the final position of the eyes
     final_eye0_pos = []
     final_eye1_pos = []
-    i = len(raw_pupil_data['eye_id'])-1
+    i = len(raw_pupil_data['id'])-1
     while len(final_eye0_pos) == 0 or len(final_eye1_pos) == 0:
-        if raw_pupil_data['eye_id'][i] == 0 and len(final_eye0_pos) == 0 and math.isnan(float(raw_pupil_data['sphere_center_z'][i])) == False:
+        if raw_pupil_data['id'][i] == 0 and len(final_eye0_pos) == 0 and math.isnan(float(raw_pupil_data['sphere_center_z'][i])) == False:
             final_eye0_pos.append(raw_pupil_data['sphere_center_x'][i]/10)
             final_eye0_pos.append(raw_pupil_data['sphere_center_y'][i]/10)
             final_eye0_pos.append(raw_pupil_data['sphere_center_z'][i]/10)
-        elif raw_pupil_data['eye_id'][i] == 1 and len(final_eye1_pos) == 0 and math.isnan(float(raw_pupil_data['sphere_center_z'][i])) == False:
+        elif raw_pupil_data['id'][i] == 1 and len(final_eye1_pos) == 0 and math.isnan(float(raw_pupil_data['sphere_center_z'][i])) == False:
             final_eye1_pos.append(raw_pupil_data['sphere_center_x'][i]/10)
             final_eye1_pos.append(raw_pupil_data['sphere_center_y'][i]/10)
             final_eye1_pos.append(raw_pupil_data['sphere_center_z'][i]/10)
@@ -218,20 +214,20 @@ if args.type == 'seq':
     # bm_mat0 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix0']
     # bm_mat1 = calibration_data['data']['calib_params']['binocular_model']['eye_camera_to_world_matrix1']
 
-    # eye with unmodified matrices+
-    # eye_world = ApplyMatrixRot(final_eye1_pos, rm_mat)
-    # eye_world[0] += rm_mat[0][3]/100 - lm_mat[0][3]/100
-    # eye_world[0] += rm_mat[1][3]/100 - lm_mat[1][3]/100
-    # eye_world[0] += rm_mat[2][3]/100 - lm_mat[2][3]/100
-    # unmod_eye_loc = YZSwap(ApplyInverseMatrixRot(eye_world, lm_mat))
-    # dist = math.sqrt((unmod_eye_loc[0]-final_eye0_pos[0])**2 + (unmod_eye_loc[1]-final_eye0_pos[2])**2 + (unmod_eye_loc[2]-final_eye0_pos[1])**2)
+    # eye with unmodified matrices
+    eye_world = ApplyMatrixRot(final_eye1_pos, rm_mat)
+    eye_world[0] += rm_mat[0][3]/100 - lm_mat[0][3]/100
+    eye_world[0] += rm_mat[1][3]/100 - lm_mat[1][3]/100
+    eye_world[0] += rm_mat[2][3]/100 - lm_mat[2][3]/100
+    unmod_eye_loc = YZSwap(ApplyInverseMatrixRot(eye_world, lm_mat))
+    dist = math.sqrt((unmod_eye_loc[0]-final_eye0_pos[0])**2 + (unmod_eye_loc[1]-final_eye0_pos[2])**2 + (unmod_eye_loc[2]-final_eye0_pos[1])**2)
 
 
     if args.eye_idx == 0:
         # inverts the y component of the rm_mat
-        rm_mat[0][1] = -rm_mat[0][1]
-        rm_mat[1][1] = -rm_mat[1][1]
-        rm_mat[2][1] = -rm_mat[2][1]
+        # rm_mat[0][1] = -rm_mat[0][1]
+        # rm_mat[1][1] = -rm_mat[1][1]
+        # rm_mat[2][1] = -rm_mat[2][1]
 
         # get vector from left camera to eye 1 in world space
         eye1_world = ApplyMatrixRot(final_eye1_pos, rm_mat)
@@ -250,24 +246,24 @@ if args.type == 'seq':
     
     if args.eye_idx == 1:
         # inverts the y component of the rm_mat
-        # lm_mat[0][0] = -lm_mat[0][0]
-        # lm_mat[1][0] = -lm_mat[1][0]
-        # lm_mat[2][0] = -lm_mat[2][0]
+        # lm_mat[0][1] = -lm_mat[0][1]
+        # lm_mat[1][1] = -lm_mat[1][1]
+        # lm_mat[2][1] = -lm_mat[2][1]
 
         # get vector from left camera to eye 0 in world space
-        eye1_world = ApplyMatrixRot(final_eye0_pos, rm_mat)
-        eye1_world[0] += rm_mat[0][3]/100 - lm_mat[0][3]/100
-        eye1_world[1] += rm_mat[1][3]/100 - lm_mat[1][3]/100
-        eye1_world[2] += rm_mat[2][3]/100 - lm_mat[2][3]/100
+        eye1_world = ApplyMatrixRot(final_eye0_pos, lm_mat)
+        eye1_world[0] += lm_mat[0][3]/100 - rm_mat[0][3]/100
+        eye1_world[1] += lm_mat[1][3]/100 - rm_mat[1][3]/100
+        eye1_world[2] += lm_mat[2][3]/100 - rm_mat[2][3]/100
 
         # apply the left camera's rotation matrix to the vector to get the right eye's location in the left camera space
-        eye1_loc = YZSwap(ApplyInverseMatrixRot(eye1_world, lm_mat))
+        eye1_loc = YZSwap(ApplyInverseMatrixRot(eye1_world, rm_mat))
 
-        other_cam = [rm_mat[0][3]/100 - lm_mat[0][3]/100, rm_mat[1][3]/100 - lm_mat[1][3]/100, rm_mat[2][3]/100 - lm_mat[2][3]/100]
-        local_other_cam = YZSwap(ApplyInverseMatrixRot(other_cam, lm_mat))
+        other_cam = [lm_mat[0][3]/100 - rm_mat[0][3]/100, lm_mat[1][3]/100 - rm_mat[1][3]/100, lm_mat[2][3]/100 - rm_mat[2][3]/100]
+        local_other_cam = YZSwap(ApplyInverseMatrixRot(other_cam, rm_mat))
         
         # get the vector from the left eye to the right eye
-        eye_delta = [eye1_loc[0]-final_eye1_pos[0], final_eye1_pos[2]-eye1_loc[1], eye1_loc[2]-final_eye1_pos[1]]
+        eye_delta = [eye1_loc[0]-final_eye1_pos[0], eye1_loc[1]-final_eye1_pos[2], eye1_loc[2]-final_eye1_pos[1]]
 
 
     print()
@@ -286,41 +282,13 @@ if args.type == 'seq':
     print('Delta eye:       '+str(eye_delta))
     print()
 
-    eye_delta_norm = eye_delta / np.linalg.norm(eye_delta)
-    # eye_delta = eye_delta_norm*dist
-
-    print('Delta eye norm:       '+str(eye_delta_norm))
-
-    head_elevation =    '-30'
-    head_roll =         str(math.degrees(math.asin(eye_delta_norm[2])))
-    head_azimuthal =    str(math.degrees(-math.asin(eye_delta_norm[1]/math.sqrt(1-eye_delta_norm[2]**2))))
-    print ('head roll: '+head_roll)
-    print ('head azimuthal: '+head_azimuthal)
-
-    local_other_pupil_normal = []
-    for eye_normal in other_pupil_normal:
-        eye_norm_world = []
-        eye_norm_world.append(eye_normal[0]*rm_mat[0][0] + eye_normal[1]*rm_mat[1][0] + eye_normal[2]*rm_mat[2][0])
-        eye_norm_world.append(eye_normal[0]*rm_mat[0][1] + eye_normal[1]*rm_mat[1][1] + eye_normal[2]*rm_mat[2][1])
-        eye_norm_world.append(eye_normal[0]*rm_mat[0][2] + eye_normal[1]*rm_mat[1][2] + eye_normal[2]*rm_mat[2][2])
-        
-        eye_norm_loc = []
-        eye_norm_loc.append(eye_norm_world[0]*lm_mat[0][0] + eye_norm_world[1]*lm_mat[0][1] + eye_norm_world[2]*lm_mat[0][2])
-        eye_norm_loc.append(eye_norm_world[0]*lm_mat[2][0] + eye_norm_world[1]*lm_mat[2][1] + eye_norm_world[2]*lm_mat[2][2])
-        eye_norm_loc.append(eye_norm_world[0]*lm_mat[1][0] + eye_norm_world[1]*lm_mat[1][1] + eye_norm_world[2]*lm_mat[1][2])
-        
-        local_other_pupil_normal.append(eye_norm_loc)
-        
-        
-
-    print('Done gathering data')
     #region Helpful prints 
-    # print ()
-    # print('lm_mat location: ' + str(lm_mat[0][3]) + ', ' + str(lm_mat[1][3]) + ', ' + str(lm_mat[2][3]))
-    # print('rm_mat location: ' + str(rm_mat[0][3]) + ', ' + str(rm_mat[1][3]) + ', ' + str(rm_mat[2][3]))
+    print ()
+    print('lm_mat location: ' + str(lm_mat[0][3]) + ', ' + str(lm_mat[1][3]) + ', ' + str(lm_mat[2][3]))
+    print('rm_mat location: ' + str(rm_mat[0][3]) + ', ' + str(rm_mat[1][3]) + ', ' + str(rm_mat[2][3]))
     # print('bm_mat0 location: ' + str(bm_mat0[0][3]) + ', ' + str(bm_mat0[1][3]) + ', ' + str(bm_mat0[2][3]))
     # print('bm_mat1 location: ' + str(bm_mat1[0][3]) + ', ' + str(bm_mat1[1][3]) + ', ' + str(bm_mat1[2][3]))
-    # print ()
+    print ()
 
     # print('lm_mat')
     # matrix = lm_mat
@@ -351,6 +319,34 @@ if args.type == 'seq':
     # print ()
     #endregion
 
+    eye_delta_norm = eye_delta / np.linalg.norm(eye_delta)
+    # eye_delta = eye_delta_norm*dist
+
+    # print('Delta eye norm:       '+str(eye_delta_norm))
+
+    head_elevation =    '-30'
+    head_roll =         str(math.degrees(math.asin(eye_delta_norm[2])))
+    head_azimuthal =    str(math.degrees(-math.asin(eye_delta_norm[1]/math.sqrt(1-eye_delta_norm[2]**2))))
+    print ('head roll: '+head_roll)
+    print ('head azimuthal: '+head_azimuthal)
+
+    local_other_pupil_normal = []
+    for eye_normal in other_pupil_normal:
+        eye_norm_world = []
+        eye_norm_world.append(eye_normal[0]*rm_mat[0][0] + eye_normal[1]*rm_mat[1][0] + eye_normal[2]*rm_mat[2][0])
+        eye_norm_world.append(eye_normal[0]*rm_mat[0][1] + eye_normal[1]*rm_mat[1][1] + eye_normal[2]*rm_mat[2][1])
+        eye_norm_world.append(eye_normal[0]*rm_mat[0][2] + eye_normal[1]*rm_mat[1][2] + eye_normal[2]*rm_mat[2][2])
+        
+        eye_norm_loc = []
+        eye_norm_loc.append(eye_norm_world[0]*lm_mat[0][0] + eye_norm_world[1]*lm_mat[0][1] + eye_norm_world[2]*lm_mat[0][2])
+        eye_norm_loc.append(eye_norm_world[0]*lm_mat[2][0] + eye_norm_world[1]*lm_mat[2][1] + eye_norm_world[2]*lm_mat[2][2])
+        eye_norm_loc.append(eye_norm_world[0]*lm_mat[1][0] + eye_norm_world[1]*lm_mat[1][1] + eye_norm_world[2]*lm_mat[1][2])
+        
+        local_other_pupil_normal.append(eye_norm_loc)
+        
+        
+
+    print('Done gathering data')
 
     print('Saving to a pickle file')
     pickle_data = {
@@ -361,7 +357,9 @@ if args.type == 'seq':
         'pupil'                 : pupil,
         'eye_loc'               : eye_loc,
         'other_eye_loc'         : eye1_loc,
-        'eye_delta'             : eye_delta
+        'eye_delta'             : eye_delta,
+        'top_center_axis'       : blink_pickle['top_center_axis'],
+        'bottom_center_axis'    : blink_pickle['bottom_center_axis']
     }
 
     with open(default_data_path+str(args.person_idx)+'/'+str(args.trial_idx)+'/export_data.pickle', 'wb') as handle:
@@ -380,7 +378,7 @@ if args.type == 'seq':
 
     if True:
         subprocess.call([args.path_to_blender,'-b','static_model/'+args.head_model+'/'+blend_file,
-                    '-P','RIT-Eyes_sequential_render.py','--',
+                    '-P','RIT-Eyes_sequential_render_double_pickle.py','--',
                     '--model_id',args.head_model,
                     '--inp',inputfile, 
                     '--data_source','seq',
