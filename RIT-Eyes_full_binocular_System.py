@@ -32,6 +32,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model_id", type= int, help='Choose a head model (1-24)', default=1)
 parser.add_argument("--person_idx", type=int, help='Person index in the GIW Data folder', default=0)
 parser.add_argument('--trial_idx', type=int, help='Trial index in the GIW Data folder', default=0)
+parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)', default=1)
 
 if '--' in sys.argv:
 	args = parser.parse_args(argv)
@@ -40,10 +41,12 @@ else:
 
 ## Global Variables Starts  ##
 default_data_path = ""      # Where all person data rest
+blender_path = ""
 data_directory = ""         # Where the data rest for a particualr person_idx and trial_idx
 model_id = args.model_id
 person_idx = args.person_idx
 trial_idx = args.trial_idx
+iris_idx = args.iris_idx
 
 gaze_data:pd.DataFrame = None
 gaze_data_dictList = None
@@ -51,25 +54,37 @@ gaze_data_dictList = None
 frame_cap = 0 # the last world video frame index
 total_frames = 0 # the total world video's frame number
 
+# In Blender Gloabl Variables
+camera0 = None
+camera1 = None
+Eye0 = None
+Eye1 = None
+
+# Render Variables
+device_type = 'OPTIX'
+output_folder = "renderings"
+binocular_output_folder = "binocular"
+
 
 ## Global Varaiables Ends   ##
 
 #### Blender Initialization Starts ####
 isBlenderProcess = False
-
-#blender_path = "./blender-2.93.3-linux-x64/blender"
-blender_path = "/media/renderings/T7/RITeyes_pipeline/blender-2.93.4-linux-x64/blender"
+#blender_path = "/media/renderings/T7/RITEyes/blender-2.93.4-linux-x64/blender"
+#blender_path = "D:/Softwares/Blender/blender.exe"
 #blender_path = "/media/renderings/New Volume/RITEyes/blender-2.93.3-linux-x64/blender"
 
-# takes a blender path from "blender_path.txt" file if there is one
+## Try to read
 try:
-    default_blender_path_file = open('blender_path.txt', 'r')
-    blender_path = default_blender_path_file.read()
+	with open('blender_path.txt', 'r') as default_blender_path_file:
+		blender_path = default_blender_path_file.read().strip()
 except Exception:
-    print('Not blender_path.txt file!')
+	print('No blender_path.txt file!')
+	blender_path = "/media/renderings/T7/RITEyes/blender-2.93.4-linux-x64/blender"
 
 try:
 	import bpy
+	print("which bpy? ", bpy.__file__)
 	isBlenderProcess = True
 except ModuleNotFoundError:
 	print("Blender not detected, starting Blender now")
@@ -80,10 +95,10 @@ except ModuleNotFoundError:
 		'--',
 		'--model_id',
 		str(args.model_id),
-		'--trial_idx',
-		str(args.trial_idx),
 		'--person_idx',
-		str(args.person_idx)
+		str(args.person_idx),
+		'--trial_idx',
+		str(args.trial_idx)
 		])
 	sys.exit()
 
@@ -425,6 +440,7 @@ def setEyeCameras(camera_matrices):
 	'''
 	Set eye camera based on camera_matrices:
 	'''
+	global camera1, camera0
 	# set camera 0
 	camera0_matrix = camera_matrices[0]
 	camera0_matrix = np.asarray(camera0_matrix)
@@ -463,6 +479,9 @@ def setEyeCameras(camera_matrices):
 	camera0.data.lens_unit = 'FOV'
 	camera0.data.angle = math.radians(51)
 
+	# Camera orientation fix 180 (to compensate Blender has camera forward vector pointing to -z by default)
+	camera0.rotation_mode = 'XYZ'
+	camera0.rotation_euler[0] += 3.14159
 
 
 
@@ -497,6 +516,129 @@ def setEyeCameras(camera_matrices):
 	# changes the FOV
 	camera1.data.lens_unit = 'FOV'
 	camera1.data.angle = math.radians(51)
+	
+	# Camera orientation fix 180 (to compensate Blender has camera forward vector pointing to -z by default)
+	camera1.rotation_mode = 'XYZ'
+	camera1.rotation_euler[0] += 3.14159
+
+def EyeCameraSettings(camera0, camera1):
+	'''
+	Set up camera parameters to get correct render result.
+	'''
+	camera0.data.lens = 5.1
+	camera0.data.sensor_width = 7.06
+
+	camera1.data.lens = 5.1
+	camera1.data.sensor_width = 7.06
+
+def RenderSetting():
+	import bpy
+	import cycles
+	preferences = bpy.context.preferences
+	cycles_preferences = preferences.addons["cycles"].preferences
+	bpy.context.scene.cycles.device = 'GPU'
+
+	# Use all available devices
+	print("USING THE FOLLOWING GPUS:")
+	cuda_devices, opencl_devices = cycles_preferences.get_devices()
+	print("Available devices", cycles_preferences.get_devices()) # for debug
+	devices=[]
+	for x in range(len(cycles_preferences.devices)):
+		if cycles_preferences.devices[x] in cuda_devices:
+			devices.append(cycles_preferences.devices[x])
+	for x in range(len(devices)):
+		print(devices[x].name)
+		devices[0].use = True
+
+	print("Computer device type =" , cycles_preferences.compute_device_type) # for debug
+	cycles_preferences.compute_device_type = device_type
+
+	# Scene Output settings
+	s = bpy.context.scene
+	# Image resolution
+	s.render.resolution_x = 640
+	s.render.resolution_y = 480
+	s.render.tile_x = 640
+	s.render.tile_y = 480
+	s.cycles.device = 'GPU'
+	s.render.image_settings.file_format = 'TIFF'
+
+def LoadEyeTextures():
+	# Loading all textures
+	# Loading all textures
+	# Iris texture
+	iris_mat = bpy.data.materials['Iris.000']
+	# Sclera texture
+	sclera_mat = bpy.data.materials['Sclera material.000']
+	skin = bpy.data.materials['skin']
+
+
+	iris_mat = bpy.data.materials['Iris.000']
+	sclera_mat = bpy.data.materials['Sclera material.000']
+	ir  =os.path.join(os.getcwd(),'Textures_eye','ir-textures/')
+	scl =os.path.join(os.getcwd(),'Textures_eye','sclera/')
+	env_path = os.path.join(os.getcwd(),'environmental_textures/')
+
+	sclera_mat.node_tree.nodes["op"].image = bpy.data.images.load(filepath=os.path.join(os.getcwd(),'Textures_eye','opacity.png'))
+	sclera_mat.node_tree.nodes["sclera"].image = bpy.data.images.load(filepath=os.path.join(os.getcwd(),'Textures_eye','Sclera color.png'))
+	sclera_mat.node_tree.nodes["Imagen.003"].image = bpy.data.images.load(filepath=os.path.join(os.getcwd(),'Textures_eye','sclera_bump.png'))
+
+	iris_mat.node_tree.nodes["iris"].image = bpy.data.images.load(filepath=os.path.join(ir, str(iris_idx)+'.png'))
+
+def RenderImageSequence():
+	'''
+	Renders the image settings with Binocular render settings
+	'''
+	s = bpy.context.scene
+
+
+	for i in range(1, frame_cap):
+		try:
+			s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
+								  s.node_tree.nodes["Composite"].inputs[0])
+		except:
+			print('No node')
+
+		frame = i
+		
+		IndividualEyeRender(0, frame)
+		IndividualEyeRender(1, frame)
+
+def IndividualEyeRender(EyeCameraIndex, frame_index):
+	'''
+	A helper method to render with particular eye camera
+	'''
+	s = bpy.context.scene
+
+	EyeCameraName = ""
+	if EyeCameraIndex == 0:
+		EyeCameraName = "Eye0"
+	else:
+		EyeCameraName = "Eye1"
+
+	s.frame_current = frame_index
+	filename = os.path.join(os.getcwd(), output_folder, binocular_output_folder, str(person_idx), str(trial_idx), EyeCameraName,
+								str(s.frame_current).zfill(4) + ".tif")
+	if os.path.isfile(os.path.join(output_folder, binocular_output_folder, str(person_idx), str(trial_idx), EyeCameraName,
+									   str(s.frame_current).zfill(4) + ".tif")):
+		print("skipped ", filename)
+	else:
+		print(frame_index)
+		s.render.filepath = filename
+
+		if EyeCameraIndex == 0:
+			s.camera = camera0
+		else:
+			s.camera = camera1
+
+		bpy.ops.render.render(  # {'dict': "override"},
+			# 'INVOKE_DEFAULT',
+			False,  # undo support
+			animation=False,
+			write_still=True)
+
+
+## Blender Opertaion Functions Ends ##
 
 ## Start Blender
 openBlenderFile()
@@ -516,6 +658,10 @@ bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
 # (Optional) Add a view vector
 add_view_vector()
 
+# Hide Objects:
+sphere = bpy.data.objects["sphere"]
+sphere.hide_render = True
+
 # Rename Scene Camera
 scene_camera = bpy.data.objects["Camera"]
 scene_camera.name = "SceneCamera"
@@ -526,6 +672,7 @@ scene_camera.data.angle = math.radians(88)
 
 # Add Eye Cameras
 setEyeCameras(camera_matrices)
+EyeCameraSettings(camera0, camera1)
 
 # Copy Eye0 to get a Eye1
 bpy.ops.object.select_all(action="DESELECT")
@@ -563,6 +710,7 @@ video_material.node_tree.nodes.remove(default_BSDF)
 # add image texture node
 image_node = video_material.node_tree.nodes.new('ShaderNodeTexImage')
 world_video_path = os.path.join(data_directory, 'world.mp4')
+print("Setting World Video Path for reference image plane:", world_video_path)
 world_video = bpy.data.images.load(world_video_path)
 image_node.image = world_video
 # Link nodes
@@ -572,8 +720,22 @@ video_material.node_tree.links.new( materialOut_node.inputs['Surface'], image_no
 image_node.image_user.frame_duration = frame_cap
 image_node.image_user.use_auto_refresh = True
 
+## Material Setting Start 	##
+LoadEyeTextures()
+
+## Material Setting Ends	##
 
 # temporarily save to a file
 bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
+
+## Rendering Start 	##
+# Set Render Engine
+RenderSetting()
+
+# Start Rendering Process
+RenderImageSequence()
+
+## Rendering Ends 	##
+
 
 #### Blender Scene Edit Ends        ####
