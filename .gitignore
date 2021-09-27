@@ -9,6 +9,7 @@ __pycache__/
 # default path
 blender_path.txt
 data_path.txt
+Stage*
 
 # renderings
 *renderings/
@@ -21,6 +22,7 @@ Textures_eye/
 
 # blender
 blender-2.82a-linux64/
+blender-2.93.4-linux-x64/
 
 # Distribution / packaging
 .Python

@@ -33,7 +33,10 @@ parser.add_argument("--model_id", type= int, help='Choose a head model (1-24)', 
 parser.add_argument("--person_idx", type=int, help='Person index in the GIW Data folder', default=0)
 parser.add_argument('--trial_idx', type=int, help='Trial index in the GIW Data folder', default=0)
 
-args = parser.parse_args(argv)
+if '--' in sys.argv:
+	args = parser.parse_args(argv)
+else:
+	args = parser.parse_args()
 
 ## Global Variables Starts  ##
 default_data_path = ""      # Where all person data rest
@@ -53,9 +56,17 @@ total_frames = 0 # the total world video's frame number
 
 #### Blender Initialization Starts ####
 isBlenderProcess = False
+
 #blender_path = "./blender-2.93.3-linux-x64/blender"
-blender_path = "D:/Softwares/Blender/blender.exe"
+blender_path = "/media/renderings/T7/RITeyes_pipeline/blender-2.93.4-linux-x64/blender"
 #blender_path = "/media/renderings/New Volume/RITEyes/blender-2.93.3-linux-x64/blender"
+
+# takes a blender path from "blender_path.txt" file if there is one
+try:
+    default_blender_path_file = open('blender_path.txt', 'r')
+    blender_path = default_blender_path_file.read()
+except Exception:
+    print('Not blender_path.txt file!')
 
 try:
 	import bpy
@@ -68,7 +79,11 @@ except ModuleNotFoundError:
 		'--python','RIT-Eyes_full_binocular_System.py',
 		'--',
 		'--model_id',
-		str(args.model_id)
+		str(args.model_id),
+		'--trial_idx',
+		str(args.trial_idx),
+		'--person_idx',
+		str(args.person_idx)
 		])
 	sys.exit()
 
@@ -444,6 +459,11 @@ def setEyeCameras(camera_matrices):
 	camera0.rotation_mode = 'AXIS_ANGLE'
 	camera0.rotation_axis_angle = camera0_fullRotVector
 
+	# changes the FOV
+	camera0.data.lens_unit = 'FOV'
+	camera0.data.angle = math.radians(51)
+
+
 
 
 	# set camera 1
@@ -474,6 +494,10 @@ def setEyeCameras(camera_matrices):
 	camera1.rotation_mode = 'AXIS_ANGLE'
 	camera1.rotation_axis_angle = camera1_fullRotVector
 
+	# changes the FOV
+	camera1.data.lens_unit = 'FOV'
+	camera1.data.angle = math.radians(51)
+
 ## Start Blender
 openBlenderFile()
 
@@ -496,6 +520,10 @@ add_view_vector()
 scene_camera = bpy.data.objects["Camera"]
 scene_camera.name = "SceneCamera"
 
+# changes the FOV
+scene_camera.data.lens_unit = 'FOV'
+scene_camera.data.angle = math.radians(88)
+
 # Add Eye Cameras
 setEyeCameras(camera_matrices)
 
@@ -514,11 +542,15 @@ setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldInde
 
 # Add a reference video plane
 # Creating the plane
+dist = 40
+angle_deg = 88
+half_width = math.tan(math.radians(angle_deg/2))*dist/10
+
 bpy.ops.mesh.primitive_plane_add(size=20, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
 video_plane = bpy.data.objects["Plane"]
-video_plane.scale[0] = 1.6
-video_plane.scale[1] = 0.9
-video_plane.location[2] = 40 # testing value
+video_plane.scale[0] = half_width
+video_plane.scale[1] = half_width / 16 * 9
+video_plane.location[2] = dist # testing value
 # set up video material
 bpy.ops.material.new() # create new material
 video_material = bpy.data.materials['Material']
