@@ -33,6 +33,9 @@ parser.add_argument("--model_id", type= int, help='Choose a head model (1-24)', 
 parser.add_argument("--person_idx", type=int, help='Person index in the GIW Data folder', default=0)
 parser.add_argument('--trial_idx', type=int, help='Trial index in the GIW Data folder', default=0)
 parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)', default=1)
+parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
+parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
+parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
 
 if '--' in sys.argv:
 	args = parser.parse_args(argv)
@@ -53,10 +56,15 @@ gaze_data_dictList = None
 
 frame_cap = 0 # the last world video frame index
 total_frames = 0 # the total world video's frame number
+start_frame = args.start_frame
+end_frame = args.end_frame
+
+render_mode = args.mode
 
 # In Blender Gloabl Variables
 camera0 = None
 camera1 = None
+ob_camera = None
 Eye0 = None
 Eye1 = None
 
@@ -98,7 +106,13 @@ except ModuleNotFoundError:
 		'--person_idx',
 		str(args.person_idx),
 		'--trial_idx',
-		str(args.trial_idx)
+		str(args.trial_idx),
+		'--start_frame',
+		str(args.start_frame),
+		'--end_frame',
+		str(args.end_frame),
+		'--mode',
+		str(args.mode),
 		])
 	sys.exit()
 
@@ -198,6 +212,7 @@ def readCalibData() -> list:
 	camera1_matrix = jsonfile["data"]["calib_params"]["binocular_model"]["eye_camera_to_world_matrix1"]
 
 	return [camera0_matrix, camera1_matrix]
+
 
 
 
@@ -320,7 +335,14 @@ def _debug_checkmismatch(frameDictListsByWorldIndex):
 			break
 			index += 1
 
-
+def DetermineFrameRange():
+	global end_frame, start_frame
+	if end_frame == 0:
+		end_frame = frame_cap
+	if start_frame == 0:
+		start_frame = 1
+	#print("Debug:", args.start_frame, args.start_frame)
+	print("Rendering frame range from " + str(start_frame) + " to " + str(end_frame))
 
 
 
@@ -335,6 +357,8 @@ print("Framecap: ", frame_cap)
 #print(findBestFrameData(2, frameDictListsByWorldIndex)) # for debug, testing frameDictListsByWorldIndex
 
 camera_matrices = readCalibData() # get camera pos and rotation information
+
+DetermineFrameRange() # decide what is the range for render
 
 
 ####	Data Processing Ends 	####
@@ -418,14 +442,24 @@ def add_view_vector():
 	Do this before copying Eye0
 	'''
 	bpy.ops.object.select_all(action="DESELECT")
-	bpy.ops.curve.primitive_nurbs_path_add(radius=100, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1), rotation=(0, 0, 0))
+	#bpy.ops.curve.primitive_nurbs_path_add(radius=100, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1), rotation=(0, 0, 0))
+	bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.1, depth=100, enter_editmode=False, align='WORLD', location=(0, 0, 50), scale=(1, 1, 1))
 	# bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
-	eye_vector = bpy.data.objects['NurbsPath']
+	eye_vector = bpy.data.objects['Cylinder']
+	eye_vector.name = "Gaze_Indicator"
 	eye_vector.parent = Eye0
-	eye_vector.rotation_euler[1] = math.radians(90)
-	eye_vector.location[2] = 100
+	# eye_vector.rotation_euler[1] = math.radians(90)
+	# eye_vector.location[2] = 100
 	bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
 	bpy.ops.object.select_all(action="DESELECT")
+
+	eye_vector_mat = bpy.data.materials.new("EyeVectorMat")
+	# eye_vector_mat.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (1, 0, 0, 1)
+	eye_vector_mat.diffuse_color = 1,0,0,1
+	eye_vector.data.materials.append(eye_vector_mat)
+	eye_vector.active_material_index = len(eye_vector.data.materials) - 1
+
+
 
 def getFullRotationVector(rod_vector):
 	'''
@@ -534,6 +568,19 @@ def EyeCameraSettings(camera0, camera1):
 def RenderSetting():
 	import bpy
 	import cycles
+	RenderDeviceSetting()
+
+	# Scene Output settings
+	s = bpy.context.scene
+	# Image resolution
+	s.render.resolution_x = 640
+	s.render.resolution_y = 480
+	s.render.tile_x = 640
+	s.render.tile_y = 480
+	s.cycles.device = 'GPU'
+	s.render.image_settings.file_format = 'TIFF'
+
+def RenderDeviceSetting():
 	preferences = bpy.context.preferences
 	cycles_preferences = preferences.addons["cycles"].preferences
 	bpy.context.scene.cycles.device = 'GPU'
@@ -552,16 +599,6 @@ def RenderSetting():
 
 	print("Computer device type =" , cycles_preferences.compute_device_type) # for debug
 	cycles_preferences.compute_device_type = device_type
-
-	# Scene Output settings
-	s = bpy.context.scene
-	# Image resolution
-	s.render.resolution_x = 640
-	s.render.resolution_y = 480
-	s.render.tile_x = 640
-	s.render.tile_y = 480
-	s.cycles.device = 'GPU'
-	s.render.image_settings.file_format = 'TIFF'
 
 def LoadEyeTextures():
 	# Loading all textures
@@ -592,7 +629,7 @@ def RenderImageSequence():
 	s = bpy.context.scene
 
 
-	for i in range(1, frame_cap):
+	for i in range(start_frame, end_frame):
 		try:
 			s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
 								  s.node_tree.nodes["Composite"].inputs[0])
@@ -637,6 +674,80 @@ def IndividualEyeRender(EyeCameraIndex, frame_index):
 			animation=False,
 			write_still=True)
 
+def ObserveRender():
+	'''
+	Render with an additional observe camera
+	'''
+
+	add_view_vector() # 
+
+	ObserveCameraSetting()
+	ob_camera.location = [0, -10, -60]
+	ob_camera.rotation_euler = [3.05, 0, 0]
+
+	RenderDeviceSetting()
+
+	s = bpy.context.scene
+	s.camera = ob_camera
+	s.render.resolution_x = 1920
+	s.render.resolution_y = 1080
+
+	s.render.tile_x = 640
+	s.render.tile_y = 480
+	s.cycles.device = 'GPU'
+	s.render.image_settings.file_format = 'TIFF'
+
+	for i in range(start_frame, end_frame):
+		try:
+			s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
+								  s.node_tree.nodes["Composite"].inputs[0])
+		except:
+			print('No node')
+
+		frame = i
+		s.frame_current = frame
+		filename = os.path.join(os.getcwd(), output_folder, binocular_output_folder, str(person_idx), str(trial_idx), "Observation",
+								str(s.frame_current).zfill(4) + ".tif")
+		if os.path.isfile(filename):
+			print("skipped ", filename)
+		else:
+			print(frame)
+			s.render.filepath = filename
+
+			bpy.ops.render.render(  # {'dict': "override"},
+				# 'INVOKE_DEFAULT',
+				False,  # undo support
+				animation=False,
+				write_still=True)
+
+def RenderPlanner():
+	'''
+	The master render function, decide what render mode to use and what routine to adopt
+	'''
+	global render_mode
+	if render_mode == "binocular":
+		RenderSetting()
+		RenderImageSequence()
+	elif render_mode == "observe":
+		ObserveRender()
+
+def ObserveCameraSetting():
+	'''
+	Add an extra observe camera for rendering
+	'''
+	global ob_camera
+	bpy.ops.object.camera_add(
+		enter_editmode=False, 
+		align='VIEW', 
+		location=(0, 0, 0), 
+		rotation=(3.14159, 0, 0), 
+		scale=(0.01, 0.01, 0.01)
+		)
+	ob_camera = bpy.data.objects["Camera"]
+	ob_camera.name = "ObCamera"
+
+	
+
 
 ## Blender Opertaion Functions Ends ##
 
@@ -672,7 +783,7 @@ scene_camera.data.angle = math.radians(88)
 
 # Add Eye Cameras
 setEyeCameras(camera_matrices)
-EyeCameraSettings(camera0, camera1)
+#EyeCameraSettings(camera0, camera1)
 
 # Copy Eye0 to get a Eye1
 bpy.ops.object.select_all(action="DESELECT")
@@ -698,6 +809,8 @@ video_plane = bpy.data.objects["Plane"]
 video_plane.scale[0] = half_width
 video_plane.scale[1] = half_width / 16 * 9
 video_plane.location[2] = dist # testing value
+video_plane.rotation_euler[2] = 3.14159
+
 # set up video material
 bpy.ops.material.new() # create new material
 video_material = bpy.data.materials['Material']
@@ -729,11 +842,10 @@ LoadEyeTextures()
 bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
 
 ## Rendering Start 	##
-# Set Render Engine
-RenderSetting()
+RenderPlanner()
 
-# Start Rendering Process
-RenderImageSequence()
+# save again after rendering setup
+bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
 
 ## Rendering Ends 	##
 
