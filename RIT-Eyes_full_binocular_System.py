@@ -54,6 +54,9 @@ iris_idx = args.iris_idx
 gaze_data:pd.DataFrame = None
 gaze_data_dictList = None
 
+pupil_data:pd.DataFrame = None
+pupil_data_dict = {}
+
 frame_cap = 0 # the last world video frame index
 total_frames = 0 # the total world video's frame number
 start_frame = args.start_frame
@@ -144,6 +147,20 @@ def readGazeData(data_directory:str) -> None:
 	#print(type(gaze_data))
 	return None
 
+def readPupilData(data_directory:str) -> None:
+	'''
+	Read pupil_position.csv file and convert to a dictionary for efficiency
+	'''
+	print("Processing pupil data...")
+	global pupil_data, pupil_data_dict
+	pupil_data = pd.read_csv(os.path.join(data_directory, "exports/pupil_positions.csv"))
+	pupil_data_dictList = pupil_data.to_dict("records")
+
+	for l in pupil_data_dictList:
+		pupil_data_dict[l["pupil_timestamp"]] = l
+
+	
+
 def getHighestConfidenceFrame(gaze_data_dictList:dict) -> dict:
 	'''
 	Find the tuples with highest confidence estimation for L and R eyes
@@ -221,6 +238,8 @@ def readCalibData() -> list:
 getDataPath()
 data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx))
 readGazeData(data_directory)
+readPupilData(data_directory)
+
 
 ####	Data Processing	Starts	####
 
@@ -420,6 +439,15 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 		Eye0.keyframe_insert(data_path="location", frame=frame_index)
 		Eye0.keyframe_insert(data_path="rotation_euler", frame=frame_index)
 
+		# set eye0 pupil size
+		eye0_pupil_timestamp = GetPupilTimeStampFromBase(Eye0_dataDict["base_data"], 0)
+		#print("Debug: pupil size data:", Eye0_dataDict["base_data"], 0, eye0_pupil_timestamp)
+		try:
+			bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = (pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] - 1) / 3
+			bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
+		except:
+			print("Error on setting pupil:", "timestamp: ", eye0_pupil_timestamp)
+
 		# Setting up Eye1 frame
 		if (Eyes_best_data[1] != None):
 			Eye1_dataDict = frameDictListsByWorldIndex[frame_index][Eyes_best_data[1]]
@@ -434,7 +462,39 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 			
 		Eye1.keyframe_insert(data_path="location", frame=frame_index)
 		Eye1.keyframe_insert(data_path="rotation_euler", frame=frame_index)
+
+		# set eye1 pupil size
+		try:
+			eye1_pupil_timestamp = GetPupilTimeStampFromBase(Eye1_dataDict["base_data"], 1)
+			bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = (pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] - 1) / 3
+			bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
+		except:
+			print("Error on setting pupil:", "timstamp:", eye1_pupil_timestamp)
+
 	print("Completed setting eye frames.")
+
+def GetPupilTimeStampFromBase(data_str:str, eye_index:int):
+	'''
+	A helper function to split base_data str from gaze data
+	base data could be a single timestamp or a double.
+
+	return the timestamp match in pupil data
+	'''
+	data_str_tokens = data_str.split(" ")
+	timestamp = 0
+	if len(data_str_tokens) == 1:
+		# if this is a single timstamp data
+		timestamp = float(data_str_tokens[0].split("-")[0])
+	elif len(data_str_tokens) == 2:
+		timestamp_list1 = data_str_tokens[0].split("-")
+		timestamp_list2 = data_str_tokens[1].split("-")
+
+		if eye_index == 0:
+			timestamp = float(timestamp_list1[0])
+		else:
+			timestamp = float(timestamp_list2[0])
+
+	return timestamp
 
 def add_view_vector():
 	'''
@@ -767,7 +827,8 @@ bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
 ## Blender Operations
 
 # (Optional) Add a view vector
-add_view_vector()
+if args.mode == "observe":
+	add_view_vector()
 
 # Hide Objects:
 sphere = bpy.data.objects["sphere"]
