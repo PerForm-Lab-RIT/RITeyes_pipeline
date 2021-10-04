@@ -157,7 +157,8 @@ def readPupilData(data_directory:str) -> None:
 	pupil_data_dictList = pupil_data.to_dict("records")
 
 	for l in pupil_data_dictList:
-		pupil_data_dict[l["pupil_timestamp"]] = l
+		if l["method"] != '2d c++':
+			pupil_data_dict[l["pupil_timestamp"]] = l
 
 	
 
@@ -301,7 +302,7 @@ def findBestFrameData(world_frame:int, frameDictListsByWorldIndex:list):
 		data_list = frameDictListsByWorldIndex[world_frame]
 	except:
 		print("world frame index error:", world_frame)
-	# print(data_list) # for debug
+	#print(data_list, world_frame) # for debug
 
 	# Loop through all data in a world frame
 	# Loop for Eye0 First
@@ -419,7 +420,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 	'''
 	print("Setting up eye frames from gaze data...")
 	# Loop through all frames
-	for frame_index in range(1, frameCount):
+	for frame_index in range(2, frameCount):
 		Eyes_best_data = findBestFrameData(frame_index, frameDictListsByWorldIndex)
 
 
@@ -442,8 +443,9 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 		# set eye0 pupil size
 		eye0_pupil_timestamp = GetPupilTimeStampFromBase(Eye0_dataDict["base_data"], 0)
 		#print("Debug: pupil size data:", Eye0_dataDict["base_data"], 0, eye0_pupil_timestamp)
+		#[float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]
 		try:
-			bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = (pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] - 1) / 3
+			bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
 			bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
 		except:
 			print("Error on setting pupil:", "timestamp: ", eye0_pupil_timestamp)
@@ -466,7 +468,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 		# set eye1 pupil size
 		try:
 			eye1_pupil_timestamp = GetPupilTimeStampFromBase(Eye1_dataDict["base_data"], 1)
-			bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = (pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] - 1) / 3
+			bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
 			bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
 		except:
 			print("Error on setting pupil:", "timstamp:", eye1_pupil_timestamp)
@@ -887,12 +889,25 @@ world_video_path = os.path.join(data_directory, 'world.mp4')
 print("Setting World Video Path for reference image plane:", world_video_path)
 world_video = bpy.data.images.load(world_video_path)
 image_node.image = world_video
+# add seperate and combine rgb node to make video black and white
+separate_rgb_node = video_material.node_tree.nodes.new('ShaderNodeSeparateRGB')
+combine_rgb_node = video_material.node_tree.nodes.new('ShaderNodeCombineRGB')
+
+
 # Link nodes
 materialOut_node = video_material.node_tree.nodes['Material Output']
-video_material.node_tree.links.new( materialOut_node.inputs['Surface'], image_node.outputs['Color'])
+# video_material.node_tree.links.new( materialOut_node.inputs['Surface'], image_node.outputs['Color'])
+video_material.node_tree.links.new( separate_rgb_node.inputs['Image'], image_node.outputs['Color'])
+video_material.node_tree.links.new( combine_rgb_node.inputs['R'], separate_rgb_node.outputs['R'])
+video_material.node_tree.links.new( combine_rgb_node.inputs['G'], separate_rgb_node.outputs['R'])
+video_material.node_tree.links.new( combine_rgb_node.inputs['B'], separate_rgb_node.outputs['R'])
+video_material.node_tree.links.new( materialOut_node.inputs['Surface'], combine_rgb_node.outputs['Image'])
 # Set video node variables:
 image_node.image_user.frame_duration = frame_cap
 image_node.image_user.use_auto_refresh = True
+
+# set up the ambient light (75%)
+bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = (0.5, 0.5, 0.5, 1)
 
 ## Material Setting Start 	##
 LoadEyeTextures()
