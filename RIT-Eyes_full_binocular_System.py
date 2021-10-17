@@ -469,7 +469,8 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
         #[float(((x / 2) * (0.8 / 3)) - (0.5 / 3)) for x in pupil]
         try:
             eye0_pupil_timestamp = GetPupilTimeStampFromBase(Eye0_dataDict["base_data"], 0)
-            bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
+            #bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
+            bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] / 2) - 0.9) / (3.704-0.9)) #float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
             bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
         except:
             print("Error on setting pupil:", "timestamp: ", eye0_pupil_timestamp)
@@ -495,7 +496,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
         # set eye1 pupil size
         try:
             eye1_pupil_timestamp = GetPupilTimeStampFromBase(Eye1_dataDict["base_data"], 1)
-            bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
+            bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) - 0.9) / (3.704-0.9)) #float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
             bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
         except:
             print("Error on setting pupil:", "timestamp:", eye1_pupil_timestamp)
@@ -521,6 +522,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
 
     print("Completed setting eye frames.")
+
 
 def GetPupilTimeStampFromBase(data_str:str, eye_index:int):
     '''
