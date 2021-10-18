@@ -859,28 +859,33 @@ def CreateSyncedVideo(frameDictListsByWorldIndex):
 
         # gets the eye data at that frame
         Eyes_best_data = findBestFrameData(i, frameDictListsByWorldIndex)
-        Eye0_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[0]]
-        Eye1_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[1]]
+        if (Eyes_best_data[0] != None and Eyes_best_data[1] != None):
+            Eye0_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[0]]
+            Eye1_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[1]]
 
-        # gets the real video frame
-        while float(Eye0_dataDict['gaze_timestamp']) < eye0_timestamps[eye0_frame]:
-            eye0_frame += 1
-        while float(Eye1_dataDict['gaze_timestamp']) < eye1_timestamps[eye1_frame]:
-            eye1_frame += 1
+            # gets the real video frame
+            while float(Eye0_dataDict['gaze_timestamp']) > eye0_timestamps[eye0_frame]:
+                eye0_frame += 1
+            while float(Eye1_dataDict['gaze_timestamp']) > eye1_timestamps[eye1_frame]:
+                eye1_frame += 1
 
-        # Gets the real eye images
-        eye0_cap.set(cv2.CAP_PROP_POS_FRAMES, eye0_frame)
-        eye1_cap.set(cv2.CAP_PROP_POS_FRAMES, eye1_frame)
+            # Gets the real eye images
+            eye0_cap.set(cv2.CAP_PROP_POS_FRAMES, eye0_frame)
+            eye1_cap.set(cv2.CAP_PROP_POS_FRAMES, eye1_frame)
+            print('Frame eye0',eye0_frame)
+            print('Frame eye1',eye1_frame)
         
-        ret0, eye0_real = eye0_cap.read()
-        ret1, eye1_real = eye1_cap.read()
+            ret0, eye0_real = eye0_cap.read()
+            ret1, eye1_real = eye1_cap.read()
 
-        # creates a new frame for the new video
-        if ret0 and ret1:
-            row1 = np.concatenate((eye0_syn,eye1_syn),axis=1)
-            row2 = np.concatenate((eye0_real,eye1_real),axis=1)
-            full_frame = np.concatenate((row1,row2),axis=0)
-            out.write(full_frame)
+            # creates a new frame for the new video
+            if ret0 and ret1:
+                row1 = np.concatenate((eye0_syn,eye1_syn),axis=1)
+                row2 = np.concatenate((eye0_real,eye1_real),axis=1)
+                full_frame = np.concatenate((row1,row2),axis=0)
+                out.write(full_frame)
+        else:
+            print('skipped')
     
     # saves the final video
     out.release()
