@@ -851,7 +851,68 @@ def ObserveRender():
                 animation=False,
                 write_still=True)
 
-def RenderPlanner():
+def CreateSyncedVideo(frameDictListsByWorldIndex):
+    '''
+    Creates a single video with the synthetic eyes and the real eyes
+    '''
+    print('Creating real-synthetic video...')
+    size=(640*2, 480*2)
+    render_path = os.path.join(os.getcwd(), output_folder, binocular_output_folder, str(person_idx), str(trial_idx))
+    out = cv2.VideoWriter(os.path.join(render_path,'real-syn.avi'),cv2.VideoWriter_fourcc(*'DIVX'), 30, size)
+
+    eye0_images = os.path.join(render_path, 'Eye0')
+    eye1_images = os.path.join(render_path, 'Eye1')
+    
+    eye0_cap = cv2.VideoCapture(os.path.join(data_directory, 'eye0.mp4'))
+    eye1_cap = cv2.VideoCapture(os.path.join(data_directory, 'eye1.mp4'))
+
+    eye0_timestamps = np.load(os.path.join(data_directory, 'eye0_timestamps.npy'))
+    eye1_timestamps = np.load(os.path.join(data_directory, 'eye1_timestamps.npy'))
+
+    eye0_frame = 0
+    eye1_frame = 0
+    for i in range(start_frame, end_frame):
+        print('Frame',i)
+        # gets the synthetic images at 
+        eye0_syn = cv2.imread(os.path.join(eye0_images, str(i).zfill(4) + ".tif"))
+        eye1_syn = cv2.imread(os.path.join(eye1_images, str(i).zfill(4) + ".tif"))
+
+        # gets the eye data at that frame
+        Eyes_best_data = findBestFrameData(i, frameDictListsByWorldIndex)
+        if (Eyes_best_data[0] != None and Eyes_best_data[1] != None):
+            Eye0_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[0]]
+            Eye1_dataDict = frameDictListsByWorldIndex[i][Eyes_best_data[1]]
+
+            # gets the real video frame
+            while float(Eye0_dataDict['gaze_timestamp']) > eye0_timestamps[eye0_frame]:
+                eye0_frame += 1
+            while float(Eye1_dataDict['gaze_timestamp']) > eye1_timestamps[eye1_frame]:
+                eye1_frame += 1
+
+            # Gets the real eye images
+            eye0_cap.set(cv2.CAP_PROP_POS_FRAMES, eye0_frame)
+            eye1_cap.set(cv2.CAP_PROP_POS_FRAMES, eye1_frame)
+            print('Frame eye0',eye0_frame)
+            print('Frame eye1',eye1_frame)
+        
+            ret0, eye0_real = eye0_cap.read()
+            ret1, eye1_real = eye1_cap.read()
+
+            # creates a new frame for the new video
+            if ret0 and ret1:
+                row1 = np.concatenate((eye0_syn,eye1_syn),axis=1)
+                row2 = np.concatenate((eye0_real,eye1_real),axis=1)
+                full_frame = np.concatenate((row1,row2),axis=0)
+                out.write(full_frame)
+        else:
+            print('skipped')
+    
+    # saves the final video
+    out.release()
+
+        
+
+def RenderPlanner(frameDictListsByWorldIndex):
     '''
     The master render function, decide what render mode to use and what routine to adopt
     '''
@@ -859,6 +920,7 @@ def RenderPlanner():
     if render_mode == "binocular":
         RenderSetting()
         RenderImageSequence()
+        CreateSyncedVideo(frameDictListsByWorldIndex)
     elif render_mode == "observe":
         ObserveRender()
 
@@ -1097,7 +1159,7 @@ HeadModifierSettings()
 bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
 
 ## Rendering Start 	##
-RenderPlanner()
+RenderPlanner(frameDictListsByWorldIndex)
 
 # save again after rendering setup
 bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
