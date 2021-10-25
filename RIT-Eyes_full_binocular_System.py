@@ -85,6 +85,10 @@ device_type = 'OPTIX'
 output_folder = "renderings"
 binocular_output_folder = "binocular"
 
+# Json Parameters
+parameters_json_path = "BinocularSystemParameters.json"
+parameters = None
+
 
 ## Global Varaiables Ends   ##
 
@@ -247,7 +251,14 @@ def readHeadInfo():
         json_str = json_file.read()
         Head_info = json.loads(json_str)
 
-
+def readJsonParameters():
+	'''
+	Read a json for parameters 
+	'''
+	global parameters
+	with open(parameters_json_path) as json_file:
+		json_str = json_file.read()
+		parameters = json.loads(json_str)
 
 
 ## Initialize Functions Ends
@@ -257,6 +268,7 @@ data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx)
 readGazeData(data_directory)
 readPupilData(data_directory)
 readHeadInfo()
+readJsonParameters()
 
 
 ####	Data Processing	Starts	####
@@ -554,7 +566,15 @@ def add_view_vector():
     '''
     bpy.ops.object.select_all(action="DESELECT")
     #bpy.ops.curve.primitive_nurbs_path_add(radius=100, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1), rotation=(0, 0, 0))
-    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.1, depth=100, enter_editmode=False, align='WORLD', location=(0, 0, 50), scale=(1, 1, 1))
+    bpy.ops.mesh.primitive_cylinder_add(
+		vertices=parameters["VIEW_VECTOR_VERTICES"], 
+		radius=parameters["VIEW_VECTOR_RADIUS"], 
+		depth=parameters["VIEW_VECTOR_LENGTH"], 
+		enter_editmode=False, 
+		align='WORLD', 
+		location=(0, 0, parameters["VIEW_VECTOR_LENGTH"]/2), 
+		scale=(1, 1, 1)
+		)
     # bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
     eye_vector = bpy.data.objects['Cylinder']
     eye_vector.name = "Gaze_Indicator"
@@ -566,7 +586,7 @@ def add_view_vector():
 
     eye_vector_mat = bpy.data.materials.new("EyeVectorMat")
     # eye_vector_mat.node_tree.nodes["Principled BSDF"].inputs[0].default_value = (1, 0, 0, 1)
-    eye_vector_mat.diffuse_color = 1,0,0,1
+    eye_vector_mat.diffuse_color = parameters["EYE_VECTOR_MAT_COLOR"]
     eye_vector.data.materials.append(eye_vector_mat)
     eye_vector.active_material_index = len(eye_vector.data.materials) - 1
 
@@ -622,7 +642,7 @@ def setEyeCameras(camera_matrices):
 
     # changes the FOV
     camera0.data.lens_unit = 'FOV'
-    camera0.data.angle = math.radians(51)
+    camera0.data.angle = math.radians(parameters["EYE_CAMERA_ANGLE"])
 
     # Camera orientation fix 180 (to compensate Blender has camera forward vector pointing to -z by default)
     camera0.rotation_mode = 'XYZ'
@@ -660,7 +680,7 @@ def setEyeCameras(camera_matrices):
 
     # changes the FOV
     camera1.data.lens_unit = 'FOV'
-    camera1.data.angle = math.radians(51)
+    camera1.data.angle = math.radians(parameters["EYE_CAMERA_ANGLE"])
     
     # Camera orientation fix 180 (to compensate Blender has camera forward vector pointing to -z by default)
     camera1.rotation_mode = 'XYZ'
@@ -670,11 +690,11 @@ def EyeCameraSettings(camera0, camera1):
     '''
     Set up camera parameters to get correct render result.
     '''
-    camera0.data.lens = 5.1
-    camera0.data.sensor_width = 7.06
+    camera0.data.lens = parameters["EYE_CAMERA_LENS"]
+    camera0.data.sensor_width = parameters["EYE_CAMERA_SENSOR_WIDTH"]
 
-    camera1.data.lens = 5.1
-    camera1.data.sensor_width = 7.06
+    camera1.data.lens = parameters["EYE_CAMERA_LENS"]
+    camera1.data.sensor_width = parameters["EYE_CAMERA_SENSOR_WIDTH"]
 
 def RenderSetting():
     import bpy
@@ -684,12 +704,12 @@ def RenderSetting():
     # Scene Output settings
     s = bpy.context.scene
     # Image resolution
-    s.render.resolution_x = 640
-    s.render.resolution_y = 480
-    s.render.tile_x = 640
-    s.render.tile_y = 480
-    s.cycles.device = 'GPU'
-    s.render.image_settings.file_format = 'TIFF'
+    s.render.resolution_x = parameters["RENDER_EYE_RESOLUTION_X"]
+    s.render.resolution_y = parameters["RENDER_EYE_RESOLUTION_Y"]
+    s.render.tile_x = parameters["RENDER_TILE_RESOLUTION_X"]
+    s.render.tile_y = parameters["RENDER_TILE_RESOLUTION_Y"]
+    s.cycles.device = parameters["RENDER_DEVICE"]
+    s.render.image_settings.file_format = parameters["RENDER_FORMAT"]
 
 def RenderDeviceSetting():
     preferences = bpy.context.preferences
@@ -793,20 +813,20 @@ def ObserveRender():
     add_view_vector() # 
 
     ObserveCameraSetting()
-    ob_camera.location = [0, -10, -60]
-    ob_camera.rotation_euler = [3.05, 0, 0]
+    ob_camera.location = parameters["OB_CAMERA_LOCATION"]
+    ob_camera.rotation_euler = [math.radians(parameters["OB_CAMERA_ROTATION_EULER"]), 0, 0]
 
     RenderDeviceSetting()
 
     s = bpy.context.scene
     s.camera = ob_camera
-    s.render.resolution_x = 1920
-    s.render.resolution_y = 1080
+    s.render.resolution_x = parameters["RENDER_OB_RESOLUTION_X"]
+    s.render.resolution_y = parameters["RENDER_OB_RESOLUTION_Y"]
 
-    s.render.tile_x = 640
-    s.render.tile_y = 480
-    s.cycles.device = 'GPU'
-    s.render.image_settings.file_format = 'TIFF'
+    s.render.tile_x = parameters["RENDER_TILE_RESOLUTION_X"]
+    s.render.tile_y = parameters["RENDER_TILE_RESOLUTION_Y"]
+    s.cycles.device = parameters["RENDER_DEVICE"]
+    s.render.image_settings.file_format = parameters["RENDER_FORMAT"]
 
     for i in range(start_frame, end_frame):
         try:
@@ -851,11 +871,13 @@ def ObserveCameraSetting():
         enter_editmode=False, 
         align='VIEW', 
         location=(0, 0, 0), 
-        rotation=(3.14159, 0, 0), 
+        rotation=(math.radians(parameters["OB_CAMERA_ROTATION"]), 0, 0), 
         scale=(0.01, 0.01, 0.01)
         )
     ob_camera = bpy.data.objects["Camera"]
     ob_camera.name = "ObCamera"
+    ob_camera.data.lens_unit = 'FOV'
+    ob_camera.data.angle = math.radians(parameters["OB_CAMERA_ANGLE"])
 
 def setHeadModel():
     '''
@@ -864,8 +886,8 @@ def setHeadModel():
     global Armature
     unhideObjectHierarchy(Armature)
 
-    Armature.location = [-4, 1.5, -2]
-    Armature.rotation_euler = [-1.5708, 0, 3.14159]
+    Armature.location = parameters["ARMATURE_LOCATION"]
+    Armature.rotation_euler = parameters["ARMATURE_ROTATION_EULER"]
 
     model_scale = PUPILLARY_DISTANCE / Head_info[str(model_id)]["pupillary distance"]
     Armature.scale = [model_scale, model_scale, model_scale]
@@ -889,20 +911,20 @@ def HeadModifierSettings():
     eye_warp2 = head.modifiers.new("EyeWarp2", type='WARP')
     eye_warp2.object_from = bpy.data.objects["pupil-empty.001"]
     eye_warp2.object_to = bpy.data.objects["cornea-empty.001"]
-    eye_warp2.strength = 0.4
+    eye_warp2.strength = parameters["EYE_WARP_STRNGTH"]
     eye_warp2.falloff_type = 'CURVE'
-    eye_warp2.falloff_radius = 0.009
+    eye_warp2.falloff_radius = parameters["EYE_WARP_FALLOFF_RADIUS"]
 
 def SetVideoPlane():
     # Creating the plane
-    dist = 40
-    angle_deg = 88
-    half_width = math.tan(math.radians(angle_deg/2))*dist/10
+    dist = parameters["VIDEO_PLANE_DIST"]
+    angle_deg = parameters["SCENE_CAMERA_ANGLE"]
+    half_width = math.tan(math.radians(angle_deg/2))*(dist)/10
 
     bpy.ops.mesh.primitive_plane_add(size=20, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
     video_plane = bpy.data.objects["Plane"]
     video_plane.scale[0] = half_width
-    video_plane.scale[1] = half_width / 16 * 9
+    video_plane.scale[1] = half_width * parameters["VIDEO_PLANE_RATIO"]
     video_plane.location[2] = dist # testing value
     video_plane.rotation_euler[2] = 3.14159
 
@@ -944,12 +966,18 @@ def SpawnGazeObject():
     '''
     Add a blue sphere object to indicate the position the eyes are gazing on the video plane.
     '''
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, enter_editmode=False, align='WORLD', location=(0, 0, -10), scale=(1, 1, 1))
+    bpy.ops.mesh.primitive_uv_sphere_add(
+			radius=parameters["GAZE_OBJECT_RADIUS"], 
+			enter_editmode=False, 
+			align='WORLD', 
+			location=parameters["GAZE_OBJECT_LOCATION"], 
+			scale=(1, 1, 1)
+		)
     gaze_object = bpy.data.objects['Sphere']
     gaze_object.name = "Gaze_object"
 
     gaze_object_mat = bpy.data.materials.new("GazeObjectMat")
-    gaze_object_mat.diffuse_color = 0,0,1,1
+    gaze_object_mat.diffuse_color = parameters["GAZE_OBJECT_DIFFUSE_COLOR"]
     gaze_object.data.materials.append(gaze_object_mat)
     gaze_object.active_material_index = len(gaze_object.data.materials) - 1
 
@@ -981,6 +1009,23 @@ def SetGazeObject(frame_index:int, video_plane, gaze_object, norm_X:float, norm_
 
     gaze_object.keyframe_insert(data_path="location", frame=frame_index)
     
+def SetSceneCamera():
+    # Rename Scene Camera
+    scene_camera = bpy.data.objects["Camera"]
+    scene_camera.name = "SceneCamera"
+
+    # changes the FOV
+    scene_camera.data.lens_unit = 'FOV'
+    scene_camera.data.angle = math.radians(parameters["SCENE_CAMERA_ANGLE"])
+
+    # set clip_end
+    scene_camera.data.clip_end = parameters["SCENE_CAMERA_CLIP_END"]
+
+    # set dof 
+    scene_camera.data.dof.use_dof = False
+
+    # set orientation
+    scene_camera.rotation_euler = parameters["SCENE_CAMERA_ROTATION_EULER"]
 
 
 ## Blender Opertaion Functions Ends ##
@@ -994,7 +1039,7 @@ Eye1 = None
 Armature = bpy.data.objects["Armature"]
 
 ## Blender Settings:
-bpy.context.scene.unit_settings.scale_length = 0.01
+bpy.context.scene.unit_settings.scale_length = parameters["SCENE_UNIT_SCALE_LENGTH"]
 bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
 
 
@@ -1008,13 +1053,8 @@ if args.mode == "observe":
 sphere = bpy.data.objects["sphere"]
 sphere.hide_render = True
 
-# Rename Scene Camera
-scene_camera = bpy.data.objects["Camera"]
-scene_camera.name = "SceneCamera"
-
-# changes the FOV
-scene_camera.data.lens_unit = 'FOV'
-scene_camera.data.angle = math.radians(88)
+# Set Scene Camera
+SetSceneCamera()
 
 # Add Eye Cameras
 setEyeCameras(camera_matrices)
@@ -1043,7 +1083,7 @@ gaze_object = SpawnGazeObject()
 setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
 
 # set up the ambient light (75%)
-bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = (0.5, 0.5, 0.5, 1)
+bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = parameters["WORLD_AMBIENT_LIGHT"]
 
 ## Material Setting Start 	##
 LoadEyeTextures()
