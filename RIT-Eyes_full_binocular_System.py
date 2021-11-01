@@ -36,6 +36,7 @@ parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)
 parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
 parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
 parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
+parser.add_argument('--high_framerate', type=bool, help='Set 120fps animation(True), or 30fps(False)', default=True)
 
 if '--' in sys.argv:
     args = parser.parse_args(argv)
@@ -65,7 +66,13 @@ total_frames = 0 # the total world video's frame number
 start_frame = args.start_frame
 end_frame = args.end_frame
 
+Eye0_TimeStamp_FrameIndex_table = {}
+Eye1_TimeStamp_FrameIndex_table = {}
+
+first_timestamp = 0
+
 render_mode = args.mode
+highfps_mode = args.high_framerate
 
 Head_info = None
 
@@ -87,7 +94,17 @@ binocular_output_folder = "binocular"
 
 # Json Parameters
 parameters_json_path = "BinocularSystemParameters.json"
+def readJsonParameters():
+    '''
+    Read a json for parameters 
+    '''
+    global parameters
+    with open(parameters_json_path) as json_file:
+        json_str = json_file.read()
+        parameters = json.loads(json_str)
+
 parameters = None
+readJsonParameters()
 
 
 ## Global Varaiables Ends   ##
@@ -99,12 +116,7 @@ isBlenderProcess = False
 #blender_path = "/media/renderings/New Volume/RITEyes/blender-2.93.3-linux-x64/blender"
 
 ## Try to read
-try:
-    with open('blender_path.txt', 'r') as default_blender_path_file:
-        blender_path = default_blender_path_file.read().strip()
-except Exception:
-    print('No blender_path.txt file!')
-    blender_path = "/media/renderings/T7/RITEyes/blender-2.93.4-linux-x64/blender"
+blender_path = parameters["BLENDER_PATH"]
 
 try:
     import bpy
@@ -129,6 +141,8 @@ except ModuleNotFoundError:
         str(args.end_frame),
         '--mode',
         str(args.mode),
+        '--high_framerate',
+        str(args.high_framerate),
         ])
     sys.exit()
 
@@ -144,13 +158,8 @@ def getDataPath():
 
     Path save to default_data_path
     """
-    try:
-        with open('data_path.txt', 'r') as default_data_path_file:
-            global default_data_path 
-            default_data_path = default_data_path_file.read().strip()
-    except Exception:
-        print('No data_path.txt file!')
-        default_data_path = 'D:/Raw Eye Data/'
+    global default_data_path
+    default_data_path = parameters["DATA_PATH"]
 
 def readGazeData(data_directory:str) -> None:
     global gaze_data
@@ -251,24 +260,10 @@ def readHeadInfo():
         json_str = json_file.read()
         Head_info = json.loads(json_str)
 
-def readJsonParameters():
-	'''
-	Read a json for parameters 
-	'''
-	global parameters
-	with open(parameters_json_path) as json_file:
-		json_str = json_file.read()
-		parameters = json.loads(json_str)
 
 
 ## Initialize Functions Ends
 
-getDataPath()
-data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx))
-readGazeData(data_directory)
-readPupilData(data_directory)
-readHeadInfo()
-readJsonParameters()
 
 
 ####	Data Processing	Starts	####
@@ -395,20 +390,6 @@ def DetermineFrameRange():
 
 
 
-## Data Processing ##
-
-frameDictListsByWorldIndex = splitGazeDataByFrame()
-frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
-total_frames = len(frameDictListsByWorldIndex)
-print("Total world frames in this video: ", total_frames)
-print("Framecap: ", frame_cap)
-## print(pd.isna(frameDictListsByWorldIndex[0][1]["eye_center1_3d_x"])) # See if a value is missing as nan
-#print(findBestFrameData(2, frameDictListsByWorldIndex)) # for debug, testing frameDictListsByWorldIndex
-
-camera_matrices = readCalibData() # get camera pos and rotation information
-
-DetermineFrameRange() # decide what is the range for render
-
 
 ####	Data Processing Ends 	####
 
@@ -519,10 +500,12 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
                 Eye0Gaze_dataDict = frameDictListsByWorldIndex[frame_index][Eyes_best_data[0]]
                 normX = Eye0Gaze_dataDict["norm_pos_x"]
                 normY = Eye0Gaze_dataDict["norm_pos_y"]
+                confidence = Eye0Gaze_dataDict["confidence"]
             else:
                 Eye1Gaze_dataDict = frameDictListsByWorldIndex[frame_index][Eyes_best_data[1]]
                 normX = Eye1Gaze_dataDict["norm_pos_x"]
                 normY = Eye1Gaze_dataDict["norm_pos_y"]
+                confidence = Eye1Gaze_dataDict["confidence"]
             SetGazeObject(
                 frame_index,
                 video_plane,
@@ -530,6 +513,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
                 normX,
                 normY
             )
+            SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
         except:
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
 
@@ -567,14 +551,14 @@ def add_view_vector():
     bpy.ops.object.select_all(action="DESELECT")
     #bpy.ops.curve.primitive_nurbs_path_add(radius=100, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1), rotation=(0, 0, 0))
     bpy.ops.mesh.primitive_cylinder_add(
-		vertices=parameters["VIEW_VECTOR_VERTICES"], 
-		radius=parameters["VIEW_VECTOR_RADIUS"], 
-		depth=parameters["VIEW_VECTOR_LENGTH"], 
-		enter_editmode=False, 
-		align='WORLD', 
-		location=(0, 0, parameters["VIEW_VECTOR_LENGTH"]/2), 
-		scale=(1, 1, 1)
-		)
+        vertices=parameters["VIEW_VECTOR_VERTICES"], 
+        radius=parameters["VIEW_VECTOR_RADIUS"], 
+        depth=parameters["VIEW_VECTOR_LENGTH"], 
+        enter_editmode=False, 
+        align='WORLD', 
+        location=(0, 0, parameters["VIEW_VECTOR_LENGTH"]/2), 
+        scale=(1, 1, 1)
+        )
     # bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
     eye_vector = bpy.data.objects['Cylinder']
     eye_vector.name = "Gaze_Indicator"
@@ -1029,12 +1013,12 @@ def SpawnGazeObject():
     Add a blue sphere object to indicate the position the eyes are gazing on the video plane.
     '''
     bpy.ops.mesh.primitive_uv_sphere_add(
-			radius=parameters["GAZE_OBJECT_RADIUS"], 
-			enter_editmode=False, 
-			align='WORLD', 
-			location=parameters["GAZE_OBJECT_LOCATION"], 
-			scale=(1, 1, 1)
-		)
+            radius=parameters["GAZE_OBJECT_RADIUS"], 
+            enter_editmode=False, 
+            align='WORLD', 
+            location=parameters["GAZE_OBJECT_LOCATION"], 
+            scale=(1, 1, 1)
+        )
     gaze_object = bpy.data.objects['Sphere']
     gaze_object.name = "Gaze_object"
 
@@ -1070,6 +1054,15 @@ def SetGazeObject(frame_index:int, video_plane, gaze_object, norm_X:float, norm_
     gaze_object.location[2] = gaze_posZ
 
     gaze_object.keyframe_insert(data_path="location", frame=frame_index)
+
+def SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index):
+    gaze_object_mat = gaze_object.active_material
+    base_color = parameters["GAZE_OBJECT_DIFFUSE_COLOR"]
+
+    confidence_color = [1 * (1-confidence), base_color[1] * confidence, base_color[2], 1]
+    gaze_object_mat.diffuse_color = confidence_color
+
+    gaze_object_mat.keyframe_insert(data_path="diffuse_color", frame=frame_index)
     
 def SetSceneCamera():
     # Rename Scene Camera
@@ -1089,8 +1082,186 @@ def SetSceneCamera():
     # set orientation
     scene_camera.rotation_euler = parameters["SCENE_CAMERA_ROTATION_EULER"]
 
+def GetBaseData(base_string):
+    '''
+    Get 2 or 1 base timestamp and eye index from a string
+    for example:
+        "542.156165-0 542.15768-1" 
+        to
+        {
+            0: 542.156165,
+            1: 542.15768
+        }   
+    '''
+    result = {}
+
+    str_tokens = base_string.split()
+    front_str = str_tokens[0]
+    front_str_tokens = front_str.split("-")
+    time_stamp1 = float(front_str_tokens[0])
+    eye_id1 = int(front_str_tokens[1])
+    result[eye_id1] = time_stamp1
+    
+    if len(str_tokens) > 1:
+        back_str = str_tokens[1]
+        back_str_tokens = back_str.split("-")
+        time_stamp2 = float(back_str_tokens[0])
+        eye_id2 = int(back_str_tokens[1])
+        result[eye_id2] = time_stamp2
+
+    return result
+
+def SetFirstTimeStamp():
+    '''
+    Set the beginning timestamp to the global first_timestamp variable
+    '''
+    global gaze_data_dictList, first_timestamp
+    first_row = gaze_data_dictList[0]
+    base_data = GetBaseData(first_row["base_data"])
+    lowest = 0
+    for key, value in base_data.items():
+        if lowest == 0:
+            lowest = value
+        elif lowest > value:
+            lowest = value
+    
+    first_timestamp = lowest
+
+def CalculateFrameIndexByTimeStamp(timestamp):
+    global first_timestamp
+
+    delta = round(timestamp - first_timestamp, 6)
+    frame_index = round(delta / 0.0084, 6)
+    frame_index = int(frame_index)
+
+    return frame_index
+
+def PrintPercentageProgress(index, all, next_report):
+    progress = round(index / all, 2)
+    percentage = int(progress * 10)
+    if percentage == next_report:
+        print('Progress: ', str(percentage) + '%')
+        next_report = next_report + 10
+        print("Next report: ", next_report)
+    return next_report
+
+
+def SetHightFrameRateAnimation(mode):
+    '''
+    Set a higher frame rate animation with all gaze data
+    @mode (str) : "Eye0", "Eye1", "Binocular"
+    '''
+    print("Setting high fps animation...")
+    global gaze_data_dictList, Eye0_TimeStamp_FrameIndex_table, Eye1_TimeStamp_FrameIndex_table
+    
+    # First, know the beginning timestamp.
+    SetFirstTimeStamp()
+    # Loop through data list, 
+    next_report = 0
+    for i in range(0, len(gaze_data_dictList)):
+
+        next_report = PrintPercentageProgress(i, len(gaze_data_dictList), next_report)
+        print("Processing: ", i, 'of', len(gaze_data_dictList))
+
+        this_dict = gaze_data_dictList[i]
+        base_data = GetBaseData(this_dict["base_data"])
+
+        # Loop, so that it could set for 1 eye or 2 eyes.
+        for key, value in base_data.items():
+            frame_index = CalculateFrameIndexByTimeStamp(value)
+            # Set Eye0
+            if key == 0:
+                Eye0_TimeStamp_FrameIndex_table[frame_index] = value
+                # Set Eye Animation
+                try:
+                    Eye0.location[0] = this_dict["eye_center0_3d_x"] * 0.1
+                    Eye0.location[1] = this_dict["eye_center0_3d_y"] * 0.1
+                    Eye0.location[2] = this_dict["eye_center0_3d_z"] * 0.1
+                    
+                    Eye0.rotation_euler[0] = -this_dict["gaze_normal0_x"]
+                    Eye0.rotation_euler[1] = this_dict["gaze_normal0_y"]
+                    Eye0.rotation_euler[2] = this_dict["gaze_normal0_z"]
+                except:
+                    continue
+                Eye0.keyframe_insert(data_path="location", frame=frame_index)
+                Eye0.keyframe_insert(data_path="rotation_euler", frame=frame_index)
+
+                try:
+                    eye0_pupil_timestamp = GetPupilTimeStampFromBase(this_dict["base_data"], 0)
+                    bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye0_pupil_timestamp]["diameter_3d"] / 2) - 0.9) / (3.704-0.9)) #float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
+                    bpy.data.meshes['Roundcube.000'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
+                except:
+                    print("Error on setting pupil:", "timestamp: ", eye0_pupil_timestamp)
+
+            # Set Eye1
+            elif key == 1:
+                Eye1_TimeStamp_FrameIndex_table[frame_index] = value
+                try:
+                    Eye1.location[0] = this_dict["eye_center1_3d_x"] * 0.1
+                    Eye1.location[1] = this_dict["eye_center1_3d_y"] * 0.1
+                    Eye1.location[2] = this_dict["eye_center1_3d_z"] * 0.1
+                    Eye1.rotation_euler[0] = -this_dict["gaze_normal1_x"]
+                    Eye1.rotation_euler[1] = this_dict["gaze_normal1_y"]
+                    Eye1.rotation_euler[2] = this_dict["gaze_normal1_z"]
+                except:
+                    continue
+                Eye1.keyframe_insert(data_path="location", frame=frame_index)
+                Eye1.keyframe_insert(data_path="rotation_euler", frame=frame_index)
+
+                try:
+                    eye1_pupil_timestamp = GetPupilTimeStampFromBase(this_dict["base_data"], 1)
+                    bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].value = float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) - 0.9) / (3.704-0.9)) #float(((pupil_data_dict[eye1_pupil_timestamp]["diameter_3d"] / 2) * (0.8 / 3)) - (0.5 / 3))
+                    bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
+                except:
+                    print("Error on setting pupil:", "timestamp: ", eye1_pupil_timestamp)
+            
+        # set gaze object animation, independent from Eye data.
+        try:
+            normX = this_dict["norm_pos_x"]
+            normY = this_dict["norm_pos_y"]
+            confidence = this_dict["confidence"]
+            SetGazeObject(
+                frame_index,
+                video_plane,
+                gaze_object,
+                normX,
+                normY
+            )
+            SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
+        except:
+            print("Error: Failed to set Gaze object, frame_index: ", frame_index)
+
+    return None
+
+
+
+
+
+
 
 ## Blender Opertaion Functions Ends ##
+
+####=============================####
+#### Main: (Program Starts Here) ####
+####=============================####
+
+## Initialization
+getDataPath()
+data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx))
+readGazeData(data_directory)
+readPupilData(data_directory)
+readHeadInfo()
+readJsonParameters()
+
+## Data Processing ##
+
+frameDictListsByWorldIndex = splitGazeDataByFrame()
+frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
+total_frames = len(frameDictListsByWorldIndex)
+print("Total world frames in this video: ", total_frames)
+print("Framecap: ", frame_cap)
+camera_matrices = readCalibData() # get camera pos and rotation information
+DetermineFrameRange() # decide what is the range for render
 
 ## Start Blender
 openBlenderFile()
@@ -1142,7 +1313,10 @@ video_plane = SetVideoPlane()
 gaze_object = SpawnGazeObject()
 
 # Position two Eyes, Revising, To be finished
-setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
+if highfps_mode == True:
+    SetHightFrameRateAnimation(None)
+else:
+    setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
 
 # set up the ambient light (75%)
 bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = parameters["WORLD_AMBIENT_LIGHT"]
