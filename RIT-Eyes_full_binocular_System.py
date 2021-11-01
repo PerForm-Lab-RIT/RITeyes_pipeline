@@ -447,7 +447,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
             Eye0.location[1] = Eye0_dataDict["eye_center0_3d_y"] * 0.1
             Eye0.location[2] = Eye0_dataDict["eye_center0_3d_z"] * 0.1
 
-            Eye0.rotation_euler[0] = -Eye0_dataDict["gaze_normal0_x"]
+            Eye0.rotation_euler[0] = Eye0_dataDict["gaze_normal0_x"]
             Eye0.rotation_euler[1] = Eye0_dataDict["gaze_normal0_y"] ##
             Eye0.rotation_euler[2] = Eye0_dataDict["gaze_normal0_z"]
 
@@ -476,7 +476,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
             Eye1.location[1] = Eye1_dataDict["eye_center1_3d_y"] * 0.1
             Eye1.location[2] = Eye1_dataDict["eye_center1_3d_z"] * 0.1
 
-            Eye1.rotation_euler[0] = -Eye1_dataDict["gaze_normal1_x"]
+            Eye1.rotation_euler[0] = Eye1_dataDict["gaze_normal1_x"]
             Eye1.rotation_euler[1] = Eye1_dataDict["gaze_normal1_y"]
             Eye1.rotation_euler[2] = Eye1_dataDict["gaze_normal1_z"]
 
@@ -856,7 +856,7 @@ def CreateSyncedVideo(frameDictListsByWorldIndex):
     eye0_frame = 0
     eye1_frame = 0
     for i in range(start_frame, end_frame):
-        print('Frame',i)
+        #print('Frame',i)
         # gets the synthetic images at 
         eye0_syn = cv2.imread(os.path.join(eye0_images, str(i).zfill(4) + ".tif"))
         eye1_syn = cv2.imread(os.path.join(eye1_images, str(i).zfill(4) + ".tif"))
@@ -876,8 +876,8 @@ def CreateSyncedVideo(frameDictListsByWorldIndex):
             # Gets the real eye images
             eye0_cap.set(cv2.CAP_PROP_POS_FRAMES, eye0_frame)
             eye1_cap.set(cv2.CAP_PROP_POS_FRAMES, eye1_frame)
-            print('Frame eye0',eye0_frame)
-            print('Frame eye1',eye1_frame)
+            #print('Frame eye0',eye0_frame)
+            #print('Frame eye1',eye1_frame)
         
             ret0, eye0_real = eye0_cap.read()
             ret1, eye1_real = eye1_cap.read()
