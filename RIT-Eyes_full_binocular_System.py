@@ -36,7 +36,7 @@ parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)
 parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
 parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
 parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
-parser.add_argument('--high_framerate', type=int, help='Set 120fps animation(1), or 30fps(0)', default=1)
+parser.add_argument('--high_framerate', type=bool, help='Set 120fps animation(True), or 30fps(False)', default=False)
 
 if '--' in sys.argv:
     args = parser.parse_args(argv)
@@ -126,6 +126,7 @@ try:
     print("which bpy? ", bpy.__file__)
     isBlenderProcess = True
 except ModuleNotFoundError:
+    print(blender_path)
     print("Blender not detected, starting Blender now")
     subprocess.call([
         blender_path, 
@@ -1165,7 +1166,16 @@ def SetHightFrameRateAnimation(mode):
     for i in range(0, len(gaze_data_dictList)):
     #for i in range(0, 6000): # for debug set loop to a smaller value
 
-        print("Processing: ", i, 'of', len(gaze_data_dictList))
+        next_report = PrintPercentageProgress(i, len(gaze_data_dictList), next_report)
+        # loading bar
+        loading_bar = 'Processing: ['
+        for j in range(20):
+            if i / len(gaze_data_dictList) > j / 20:
+                loading_bar += '#'
+            else:
+                loading_bar += ' '
+        loading_bar += '] ' + str(i) + ' of ' +  str(len(gaze_data_dictList))
+        print(loading_bar,end='\r')
 
         this_dict = gaze_data_dictList[i]
         base_data = GetBaseData(this_dict["base_data"])
@@ -1237,6 +1247,8 @@ def SetHightFrameRateAnimation(mode):
         except Exception as e_msg:
             print(e_msg)
             
+        print()
+
         # set gaze object animation, independent from Eye data.
         try:
             normX = this_dict["norm_pos_x"]
