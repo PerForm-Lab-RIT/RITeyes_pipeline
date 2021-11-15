@@ -36,7 +36,7 @@ parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)
 parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
 parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
 parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
-parser.add_argument('--high_framerate', type=bool, help='Set 120fps animation(True), or 30fps(False)', default=True)
+parser.add_argument('--high_framerate', type=int, help='Set 120fps animation(1), or 30fps(0)', default=1)
 
 if '--' in sys.argv:
     args = parser.parse_args(argv)
@@ -68,11 +68,13 @@ end_frame = args.end_frame
 
 Eye0_TimeStamp_FrameIndex_table = {}
 Eye1_TimeStamp_FrameIndex_table = {}
+TimeStamp_record_table = {}
 
 first_timestamp = 0
 
 render_mode = args.mode
-highfps_mode = args.high_framerate
+highfps_mode = bool(args.high_framerate)
+print("Debug: highfps_mode = ", highfps_mode)
 
 Head_info = None
 
@@ -85,6 +87,7 @@ Eye1 = None
 Armature = None
 head = None
 video_plane = None
+video_material = None
 gaze_object = None
 
 # Render Variables
@@ -447,7 +450,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
             Eye0.location[1] = Eye0_dataDict["eye_center0_3d_y"] * 0.1
             Eye0.location[2] = Eye0_dataDict["eye_center0_3d_z"] * 0.1
 
-            Eye0.rotation_euler[0] = Eye0_dataDict["gaze_normal0_x"]
+            Eye0.rotation_euler[0] = -Eye0_dataDict["gaze_normal0_x"]
             Eye0.rotation_euler[1] = Eye0_dataDict["gaze_normal0_y"] ##
             Eye0.rotation_euler[2] = Eye0_dataDict["gaze_normal0_z"]
 
@@ -476,7 +479,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
             Eye1.location[1] = Eye1_dataDict["eye_center1_3d_y"] * 0.1
             Eye1.location[2] = Eye1_dataDict["eye_center1_3d_z"] * 0.1
 
-            Eye1.rotation_euler[0] = Eye1_dataDict["gaze_normal1_x"]
+            Eye1.rotation_euler[0] = -Eye1_dataDict["gaze_normal1_x"]
             Eye1.rotation_euler[1] = Eye1_dataDict["gaze_normal1_y"]
             Eye1.rotation_euler[2] = Eye1_dataDict["gaze_normal1_z"]
 
@@ -963,6 +966,7 @@ def HeadModifierSettings():
 
 def SetVideoPlane():
     # Creating the plane
+    global video_material, video_plane
     dist = parameters["VIDEO_PLANE_DIST"]
     angle_deg = parameters["SCENE_CAMERA_ANGLE"]
     half_width = math.tan(math.radians(angle_deg/2))*(dist)/10
@@ -1152,25 +1156,33 @@ def SetHightFrameRateAnimation(mode):
     @mode (str) : "Eye0", "Eye1", "Binocular"
     '''
     print("Setting high fps animation...")
-    global gaze_data_dictList, Eye0_TimeStamp_FrameIndex_table, Eye1_TimeStamp_FrameIndex_table
+    global gaze_data_dictList, Eye0_TimeStamp_FrameIndex_table, Eye1_TimeStamp_FrameIndex_table, TimeStamp_record_table
+    world_frame_offset = 0
     
     # First, know the beginning timestamp.
     SetFirstTimeStamp()
     # Loop through data list, 
-    next_report = 0
     for i in range(0, len(gaze_data_dictList)):
+    #for i in range(0, 6000): # for debug set loop to a smaller value
 
-        next_report = PrintPercentageProgress(i, len(gaze_data_dictList), next_report)
         print("Processing: ", i, 'of', len(gaze_data_dictList))
 
         this_dict = gaze_data_dictList[i]
         base_data = GetBaseData(this_dict["base_data"])
+        this_timestamp = this_dict["gaze_timestamp"]
+        this_frame_index = CalculateFrameIndexByTimeStamp(this_timestamp)
+
+        # Check if this datum is repetitive
+        if this_frame_index in TimeStamp_record_table:
+            continue
+        else:
+            TimeStamp_record_table[this_frame_index] = this_timestamp
 
         # Loop, so that it could set for 1 eye or 2 eyes.
         for key, value in base_data.items():
             frame_index = CalculateFrameIndexByTimeStamp(value)
             # Set Eye0
-            if key == 0:
+            if key == 0 and (frame_index not in Eye0_TimeStamp_FrameIndex_table):
                 Eye0_TimeStamp_FrameIndex_table[frame_index] = value
                 # Set Eye Animation
                 try:
@@ -1182,7 +1194,7 @@ def SetHightFrameRateAnimation(mode):
                     Eye0.rotation_euler[1] = this_dict["gaze_normal0_y"]
                     Eye0.rotation_euler[2] = this_dict["gaze_normal0_z"]
                 except:
-                    continue
+                    pass
                 Eye0.keyframe_insert(data_path="location", frame=frame_index)
                 Eye0.keyframe_insert(data_path="rotation_euler", frame=frame_index)
 
@@ -1194,7 +1206,7 @@ def SetHightFrameRateAnimation(mode):
                     print("Error on setting pupil:", "timestamp: ", eye0_pupil_timestamp)
 
             # Set Eye1
-            elif key == 1:
+            elif key == 1 and (frame_index not in Eye1_TimeStamp_FrameIndex_table):
                 Eye1_TimeStamp_FrameIndex_table[frame_index] = value
                 try:
                     Eye1.location[0] = this_dict["eye_center1_3d_x"] * 0.1
@@ -1204,7 +1216,7 @@ def SetHightFrameRateAnimation(mode):
                     Eye1.rotation_euler[1] = this_dict["gaze_normal1_y"]
                     Eye1.rotation_euler[2] = this_dict["gaze_normal1_z"]
                 except:
-                    continue
+                    pass
                 Eye1.keyframe_insert(data_path="location", frame=frame_index)
                 Eye1.keyframe_insert(data_path="rotation_euler", frame=frame_index)
 
@@ -1214,6 +1226,16 @@ def SetHightFrameRateAnimation(mode):
                     bpy.data.meshes['Roundcube.001'].shape_keys.key_blocks["Pupil contract"].keyframe_insert(data_path="value",frame=frame_index)
                 except:
                     print("Error on setting pupil:", "timestamp: ", eye1_pupil_timestamp)
+        
+        # set video plane's offset
+        try:
+            world_index = this_dict["world_index"]
+            this_world_frame_index = int(this_frame_index/4)
+            world_frame_offset = -(this_frame_index - this_world_frame_index)
+            video_material.node_tree.nodes["Image Texture"].image_user.frame_offset = world_frame_offset
+            video_material.node_tree.nodes["Image Texture"].image_user.keyframe_insert(data_path="frame_offset", frame = this_frame_index)
+        except Exception as e_msg:
+            print(e_msg)
             
         # set gaze object animation, independent from Eye data.
         try:
@@ -1227,9 +1249,10 @@ def SetHightFrameRateAnimation(mode):
                 normX,
                 normY
             )
-            SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
+            SetGazeObjectColorByConfidence(gaze_object, confidence, this_frame_index)
         except:
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
+
 
     return None
 
@@ -1256,8 +1279,12 @@ readJsonParameters()
 ## Data Processing ##
 
 frameDictListsByWorldIndex = splitGazeDataByFrame()
-frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
-total_frames = len(frameDictListsByWorldIndex)
+if highfps_mode == False:
+    frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
+    total_frames = len(frameDictListsByWorldIndex)
+else:
+    frame_cap = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
+    total_frames = frame_cap
 print("Total world frames in this video: ", total_frames)
 print("Framecap: ", frame_cap)
 camera_matrices = readCalibData() # get camera pos and rotation information
@@ -1314,8 +1341,10 @@ gaze_object = SpawnGazeObject()
 
 # Position two Eyes, Revising, To be finished
 if highfps_mode == True:
+    print("Setting 120 fps animation...")
     SetHightFrameRateAnimation(None)
 else:
+    print("Setting 30 fps animation")
     setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
 
 # set up the ambient light (75%)
