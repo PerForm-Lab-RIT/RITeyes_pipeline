@@ -36,7 +36,7 @@ parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)
 parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
 parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
 parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
-parser.add_argument('--high_framerate', type=bool, help='Set 120fps animation(True), or 30fps(False)', default=False)
+parser.add_argument('--high_framerate', type=int, help='Set 120fps animation(1), or 30fps(0)', default=False)
 
 if '--' in sys.argv:
     args = parser.parse_args(argv)
@@ -1167,7 +1167,6 @@ def SetHightFrameRateAnimation(mode):
     for i in range(0, len(gaze_data_dictList)):
     #for i in range(0, 6000): # for debug set loop to a smaller value
 
-        next_report = PrintPercentageProgress(i, len(gaze_data_dictList), next_report)
         # loading bar
         loading_bar = 'Processing: ['
         for j in range(20):
@@ -1292,7 +1291,7 @@ readJsonParameters()
 ## Data Processing ##
 
 frameDictListsByWorldIndex = splitGazeDataByFrame()
-if highfps_mode == False:
+if highfps_mode == 0:
     frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
     total_frames = len(frameDictListsByWorldIndex)
 else:
