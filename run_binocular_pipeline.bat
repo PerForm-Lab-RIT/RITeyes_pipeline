@@ -9,9 +9,10 @@ SET /P iris_idx=    "Enter Iris Index (which iris texture we are using for rende
 SET /P start_frame= "Enter Start Frame (the first frame we render from in the world video) [0]: " || SET start_frame=0
 SET /P end_frame=   "Enter End Frame (the last frame we render from in the world video, 0 means there is no limit)  [0]: " || SET end_frame=0
 SET /P mode=        "Enter Mode (changes render node to either binocular, each eye, or observe, from behind the eyes) [binocular]: " || SET mode=binocular
-SET /P framerate=   "Enter Frame Rate (120 fps animation is True, 30 fps animation is False) [True]: " || SET framerate=True
+SET /P framerate=   "Enter Frame Rate (120 fps animation is 1, 30 fps animation is 0) [1]: " || SET framerate=1
+SET /P overload=   "Enter Force Overload (Create new stage file is 1, don't is 0) [0]: " || SET overload=0
 echo -----------------------------------------------------------------------
-python RIT-Eyes_full_binocular_System.py --model_id %model_id% --person_idx %person_idx% --trial_idx %trial_idx% --iris_idx %iris_idx% --start_frame %start_frame% --end_frame %end_frame% --mode %mode% --high_framerate %framerate%
+python RIT-Eyes_full_binocular_System.py --model_id %model_id% --person_idx %person_idx% --trial_idx %trial_idx% --iris_idx %iris_idx% --start_frame %start_frame% --end_frame %end_frame% --mode %mode% --high_framerate %framerate% --force_overload %overload%
 
 echo Pipeline finished rendering
 pause

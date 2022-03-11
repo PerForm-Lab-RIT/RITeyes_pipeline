@@ -36,7 +36,8 @@ parser.add_argument('--iris_idx', type=int, help='Which iris texture to use(1-9)
 parser.add_argument('--start_frame', type=int, help='The starting frame to render, >=1', default=0)
 parser.add_argument('--end_frame', type=int, help='the ending frame to render, >=2', default=0)
 parser.add_argument('--mode', type=str, help='Choose a render mode', default='binocular')
-parser.add_argument('--high_framerate', type=int, help='Set 120fps animation(1), or 30fps(0)', default=False)
+parser.add_argument('--high_framerate', type=int, help='Set 120fps animation(1), or 30fps(0)', default=0)
+parser.add_argument('--force_overload', type=int, help='Forces the pipeline to generate new stagefile', default=0)
 
 if '--' in sys.argv:
     args = parser.parse_args(argv)
@@ -76,6 +77,9 @@ render_mode = args.mode
 highfps_mode = bool(args.high_framerate)
 print("Debug: highfps_mode = ", highfps_mode)
 
+force_overload = bool(args.force_overload)
+print("Debug: force_overload = ", force_overload)
+
 Head_info = None
 
 # In Blender Gloabl Variables
@@ -94,6 +98,7 @@ gaze_object = None
 device_type = 'CUDA'
 output_folder = "renderings"
 binocular_output_folder = "binocular"
+stage_folder = "stage_files"
 
 # Json Parameters
 parameters_json_path = "BinocularSystemParameters.json"
@@ -147,6 +152,8 @@ except ModuleNotFoundError:
         str(args.mode),
         '--high_framerate',
         str(args.high_framerate),
+        '--force_overload',
+        str(args.force_overload),
         ])
     sys.exit()
 
@@ -673,6 +680,13 @@ def setEyeCameras(camera_matrices):
     # Camera orientation fix 180 (to compensate Blender has camera forward vector pointing to -z by default)
     camera1.rotation_mode = 'XYZ'
     camera1.rotation_euler[0] += 3.14159
+
+def GetCameras():
+    global scene_camera, camera0, camera1
+    
+    scene_camera = bpy.data.objects["SceneCamera"]
+    camera0 = bpy.data.objects["Camera0"]
+    camera1 = bpy.data.objects["Camera1"]
 
 def EyeCameraSettings(camera0, camera1):
     '''
@@ -1268,12 +1282,6 @@ def SetHightFrameRateAnimation(mode):
 
     return None
 
-
-
-
-
-
-
 ## Blender Opertaion Functions Ends ##
 
 ####=============================####
@@ -1290,96 +1298,113 @@ readJsonParameters()
 
 ## Data Processing ##
 
+if args.high_framerate == 0:
+    frame_rate = '_low'
+else:
+    frame_rate = '_high' 
+
+# temporarily save to a file
+stagepath = os.path.join(os.getcwd(), stage_folder, str(person_idx), str(trial_idx), str(model_id), args.mode+frame_rate+'_stage.blend')
+
 frameDictListsByWorldIndex = splitGazeDataByFrame()
-if highfps_mode == 0:
-    frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
-    total_frames = len(frameDictListsByWorldIndex)
+## If file does not exist, keyframe and save a new file
+if not os.path.isfile(stagepath) or force_overload:
+    if highfps_mode == 0:
+        frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
+        total_frames = len(frameDictListsByWorldIndex)
+    else:
+        frame_cap = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
+        total_frames = frame_cap
+    print("Total world frames in this video: ", total_frames)
+    print("Framecap: ", frame_cap)
+    camera_matrices = readCalibData() # get camera pos and rotation information
+    DetermineFrameRange() # decide what is the range for render
+
+    ## Start Blender
+    openBlenderFile()
+
+    ## Blender Objects
+    Eye0 = bpy.data.objects["Eye.Wetness"]
+    Eye1 = None
+    Armature = bpy.data.objects["Armature"]
+
+    ## Blender Settings:
+    bpy.context.scene.unit_settings.scale_length = parameters["SCENE_UNIT_SCALE_LENGTH"]
+    bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
+
+    ## Blender Operations
+
+    # (Optional) Add a view vector
+    if args.mode == "observe":
+        add_view_vector()
+
+    # Hide Objects:
+    sphere = bpy.data.objects["sphere"]
+    sphere.hide_render = True
+
+    # Copy Eye0 to get a Eye1
+    bpy.ops.object.select_all(action="DESELECT")
+    selectObjectHierarchy(Eye0)
+    bpy.ops.object.duplicate()
+    bpy.ops.object.select_all(action="DESELECT")
+    Eye1 = bpy.data.objects["Eye.Wetness.001"]
+
+    # Head Model Setting
+    if render_mode == "observe":
+        hideObjectHierarchy(Armature)
+    elif render_mode == "binocular":
+        setHeadModel()
+
+    # Add a reference video plane
+    video_plane = SetVideoPlane()
+
+    # Add Gaze Object to the scene
+    gaze_object = SpawnGazeObject()
+
+    # Position two Eyes, Revising, To be finished
+    if highfps_mode == True:
+        print("Setting 120 fps animation...")
+        SetHightFrameRateAnimation(None)
+    else:
+        print("Setting 30 fps animation")
+        setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
+
+    # set up the ambient light (75%)
+    bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = parameters["WORLD_AMBIENT_LIGHT"]
+    
+    # Set Scene Camera
+    SetSceneCamera()
+
+    # Add Eye Cameras
+    setEyeCameras(camera_matrices)
+    #EyeCameraSettings(camera0, camera1)
+
+    ## Modifier Settings:
+    HeadModifierSettings()
+    
+    ## Saving the keyframed file
+    bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+
+## If file does exist, open it
 else:
-    frame_cap = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
-    total_frames = frame_cap
-print("Total world frames in this video: ", total_frames)
-print("Framecap: ", frame_cap)
-camera_matrices = readCalibData() # get camera pos and rotation information
-DetermineFrameRange() # decide what is the range for render
+    if args.model_id != 0:
+        bpy.ops.wm.open_mainfile(filepath=stagepath)
 
-## Start Blender
-openBlenderFile()
-
-## Blender Objects
-Eye0 = bpy.data.objects["Eye.Wetness"]
-Eye1 = None
-Armature = bpy.data.objects["Armature"]
-
-## Blender Settings:
-bpy.context.scene.unit_settings.scale_length = parameters["SCENE_UNIT_SCALE_LENGTH"]
-bpy.context.scene.unit_settings.length_unit = 'CENTIMETERS'
-
-
-## Blender Operations
-
-# (Optional) Add a view vector
-if args.mode == "observe":
-    add_view_vector()
-
-# Hide Objects:
-sphere = bpy.data.objects["sphere"]
-sphere.hide_render = True
-
-# Set Scene Camera
-SetSceneCamera()
-
-# Add Eye Cameras
-setEyeCameras(camera_matrices)
-#EyeCameraSettings(camera0, camera1)
-
-# Copy Eye0 to get a Eye1
-bpy.ops.object.select_all(action="DESELECT")
-selectObjectHierarchy(Eye0)
-bpy.ops.object.duplicate()
-bpy.ops.object.select_all(action="DESELECT")
-Eye1 = bpy.data.objects["Eye.Wetness.001"]
-
-# Head Model Setting
-if render_mode == "observe":
-    hideObjectHierarchy(Armature)
-elif render_mode == "binocular":
-    setHeadModel()
-
-# Add a reference video plane
-video_plane = SetVideoPlane()
-
-# Add Gaze Object to the scene
-gaze_object = SpawnGazeObject()
-
-# Position two Eyes, Revising, To be finished
-if highfps_mode == True:
-    print("Setting 120 fps animation...")
-    SetHightFrameRateAnimation(None)
-else:
-    print("Setting 30 fps animation")
-    setUpGazeAnimationFrames(total_frames - 1, Eye0, Eye1, frameDictListsByWorldIndex)
-
-# set up the ambient light (75%)
-bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = parameters["WORLD_AMBIENT_LIGHT"]
+    # Get Cameras
+    GetCameras()
 
 ## Material Setting Start 	##
 LoadEyeTextures()
-
 ## Material Setting Ends	##
 
-## Modifier Settings:
-HeadModifierSettings()
-
-# temporarily save to a file
-bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
+bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Start 	##
 RenderPlanner(frameDictListsByWorldIndex)
 
 # save again after rendering setup
-bpy.ops.wm.save_as_mainfile(filepath="./Stage.blend")
+bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Ends 	##
-
 
 #### Blender Scene Edit Ends        ####
