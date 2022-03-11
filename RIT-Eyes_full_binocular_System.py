@@ -99,6 +99,7 @@ device_type = 'CUDA'
 output_folder = "renderings"
 binocular_output_folder = "binocular"
 stage_folder = "stage_files"
+random_parameters_folder = "random_parameters"
 
 # Json Parameters
 parameters_json_path = "BinocularSystemParameters.json"
@@ -761,7 +762,6 @@ def RenderImageSequence():
     '''
     s = bpy.context.scene
 
-
     for i in range(start_frame, end_frame):
         try:
             s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
@@ -1282,6 +1282,74 @@ def SetHightFrameRateAnimation(mode):
 
     return None
 
+def IndividualEyeRandom(frame_index, ambient, specularity, dof):
+    '''
+    A helper method to render with particular eye camera
+    '''
+    s = bpy.context.scene
+    s.frame_current = frame_index
+
+    bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = [ambient, ambient, ambient, 1]
+    bpy.data.materials["skin"].node_tree.nodes["Principled BSDF"].inputs[7].default_value = specularity
+
+    camera0.data.dof.use_dof = True
+    camera0.data.dof.focus_object = bpy.data.objects["Eye.Wetness"]
+    camera0.data.dof.aperture_fstop = dof
+
+    parameters_name = "a_{:.3f}_s_{:.3f}_dof_{:.3f}.tiff".format(ambient, specularity, dof)
+
+    filename = os.path.join(os.getcwd(), output_folder, random_parameters_folder, str(person_idx), str(trial_idx), parameters_name)
+
+    if os.path.isfile(filename):
+        print("skipped ", filename)
+    else:
+        print(frame_index)
+        s.render.filepath = filename
+        s.camera = camera0
+
+        bpy.ops.render.render(  # {'dict': "override"},
+            # 'INVOKE_DEFAULT',
+            False,  # undo support
+            animation=False,
+            write_still=True)
+
+def RenderRandomFeatures():
+    '''
+    Renders a single frame with varying parameters
+    '''
+
+    RenderSetting()
+    s = bpy.context.scene
+
+    ambient_min = 0.4
+    ambient_max = 1
+    ambient_steps = 2
+
+    specularity_min = 0
+    specularity_max = 1
+    specularity_steps = 2
+
+    dof_min = 0.7
+    dof_max = 2.4
+    dof_steps = 2
+
+    try:
+        s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
+                            s.node_tree.nodes["Composite"].inputs[0])
+    except:
+        print('No node')
+    
+    video_plane = bpy.data.objects["Plane"]
+    video_plane.hide_render = True
+
+    for i in range(ambient_steps):
+        ambient = ambient_min + (i / ambient_steps) * (ambient_max - ambient_min)
+        for j in range(specularity_steps):
+            specularity = specularity_min + (j / specularity_steps) * (specularity_max - specularity_min)
+            for k in range(dof_steps):
+                dof = dof_min + (k / dof_steps) * (dof_max - dof_min)
+                IndividualEyeRandom(start_frame, ambient, specularity, dof)
+
 ## Blender Opertaion Functions Ends ##
 
 ####=============================####
@@ -1383,7 +1451,7 @@ if not os.path.isfile(stagepath) or force_overload:
     HeadModifierSettings()
     
     ## Saving the keyframed file
-    bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+    # bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## If file does exist, open it
 else:
@@ -1397,13 +1465,14 @@ else:
 LoadEyeTextures()
 ## Material Setting Ends	##
 
-bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+# bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Start 	##
-RenderPlanner(frameDictListsByWorldIndex)
+# RenderPlanner(frameDictListsByWorldIndex)
+RenderRandomFeatures()
 
 # save again after rendering setup
-bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+# bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Ends 	##
 
