@@ -1,6 +1,8 @@
 {
-	"BLENDER_PATH" : "D:/blender-2.93.4-windows-x64/blender-2.93.4-windows-x64/blender.exe",
-	"DATA_PATH" : "D:/Raw Eye Data/",
+	"orginial_BLENDER_PATH" : "D:/blender-2.93.4-windows-x64/blender-2.93.4-windows-x64/blender.exe",
+	"BLENDER_PATH" : "D:/Blender/versions/blender-2.93-windows-x64/src/blender.exe",
+	"original_DATA_PATH" : "D:/Raw Eye Data/",
+	"DATA_PATH": "D:/RIT-Eyes/Data",
 	"VIEW_VECTOR_VERTICES" : 8,
 	"VIEW_VECTOR_RADIUS" : 0.1,
 	"VIEW_VECTOR_LENGTH" : 200,

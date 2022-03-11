@@ -91,7 +91,7 @@ video_material = None
 gaze_object = None
 
 # Render Variables
-device_type = 'OPTIX'
+device_type = 'CUDA'
 output_folder = "renderings"
 binocular_output_folder = "binocular"
 
@@ -343,11 +343,11 @@ def findBestFrameData(world_frame:int, frameDictListsByWorldIndex:list):
         if pd.isna(data_list[e]["eye_center0_3d_x"]):
             continue
         else:
-            if data_confidence == 1.0:
-                Eye0_best = e
-                break
-            elif data_confidence > best_confidence:
-                best_confidence = data_confidence
+            # if data_confidence == 1.0:
+            #     Eye0_best = e
+            #     break
+            # elif data_confidence > best_confidence:
+            #     best_confidence = data_confidence
                 Eye0_best = e
     
 
@@ -361,11 +361,11 @@ def findBestFrameData(world_frame:int, frameDictListsByWorldIndex:list):
         if pd.isna(data_list[e]["eye_center1_3d_x"]):
             continue
         else:
-            if data_confidence == 1.0:
-                Eye1_best = e
-                break
-            elif data_confidence >= best_confidence:
-                best_confidence = data_confidence
+            # if data_confidence == 1.0:
+            #     Eye1_best = e
+            #     break
+            # elif data_confidence >= best_confidence:
+            #    best_confidence = data_confidence
                 Eye1_best = e
     
 
@@ -1159,6 +1159,7 @@ def SetHightFrameRateAnimation(mode):
     print("Setting high fps animation...")
     global gaze_data_dictList, Eye0_TimeStamp_FrameIndex_table, Eye1_TimeStamp_FrameIndex_table, TimeStamp_record_table
     world_frame_offset = 0
+    next_report = 0
     
     # First, know the beginning timestamp.
     SetFirstTimeStamp()
