@@ -1282,23 +1282,26 @@ def SetHightFrameRateAnimation(mode):
 
     return None
 
-def IndividualEyeRandom(frame_index, ambient, specularity, dof):
+def IndividualEyeRandom(start_frame, ambient, specularity, dof):
     '''
     A helper method to render with particular eye camera
     '''
-    s = bpy.context.scene
-    s.frame_current = frame_index
-
     bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value = [ambient, ambient, ambient, 1]
     bpy.data.materials["skin"].node_tree.nodes["Principled BSDF"].inputs[7].default_value = specularity
+
+    parameters_name = "a_{:.3f}_s_{:.3f}_dof_{:.3f}.tiff".format(ambient, specularity, dof)
+
+    filename = os.path.join(os.getcwd(), output_folder, random_parameters_folder, str(person_idx), str(trial_idx), parameters_name)
 
     camera0.data.dof.use_dof = True
     camera0.data.dof.focus_object = bpy.data.objects["Eye.Wetness"]
     camera0.data.dof.aperture_fstop = dof
 
-    parameters_name = "a_{:.3f}_s_{:.3f}_dof_{:.3f}.tiff".format(ambient, specularity, dof)
+    RenderSingleFrame(start_frame, filename)
 
-    filename = os.path.join(os.getcwd(), output_folder, random_parameters_folder, str(person_idx), str(trial_idx), parameters_name)
+def RenderSingleFrame(frame_index, filename):
+    s = bpy.context.scene
+    s.frame_current = frame_index
 
     if os.path.isfile(filename):
         print("skipped ", filename)
@@ -1329,9 +1332,9 @@ def RenderRandomFeatures():
     specularity_max = 1
     specularity_steps = 2
 
-    dof_min = 0.7
-    dof_max = 2.4
-    dof_steps = 2
+    dof_min = 0.03
+    dof_max = 0.08
+    dof_steps = 4
 
     try:
         s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
@@ -1349,6 +1352,9 @@ def RenderRandomFeatures():
             for k in range(dof_steps):
                 dof = dof_min + (k / dof_steps) * (dof_max - dof_min)
                 IndividualEyeRandom(start_frame, ambient, specularity, dof)
+            camera0.data.dof.use_dof = False
+            RenderSingleFrame(start_frame, os.path.join(os.getcwd(), output_folder, random_parameters_folder, str(person_idx), str(trial_idx),
+                                     "a_{:.3f}_s_{:.3f}_dof_none.tiff".format(ambient, specularity)))
 
 ## Blender Opertaion Functions Ends ##
 
