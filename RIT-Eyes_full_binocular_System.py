@@ -82,6 +82,8 @@ print("Debug: force_overload = ", force_overload)
 
 Head_info = None
 
+Loaded_file_flag:bool = False # a boolean flag to avoid reprocessing loaded processed file
+
 # In Blender Gloabl Variables
 camera0 = None
 camera1 = None
@@ -455,9 +457,12 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
         eye0_pupil_timestamp = 0
         if (Eyes_best_data[0] != None):
             Eye0_dataDict = frameDictListsByWorldIndex[frame_index][Eyes_best_data[0]]
-            Eye0.location[0] = Eye0_dataDict["eye_center0_3d_x"] * 0.1
-            Eye0.location[1] = Eye0_dataDict["eye_center0_3d_y"] * 0.1
-            Eye0.location[2] = Eye0_dataDict["eye_center0_3d_z"] * 0.1
+            # Eye0.location[0] = Eye0_dataDict["eye_center0_3d_x"] * 0.1
+            # Eye0.location[1] = Eye0_dataDict["eye_center0_3d_y"] * 0.1
+            # Eye0.location[2] = Eye0_dataDict["eye_center0_3d_z"] * 0.1
+            Eye0.location[0] = 20 * 0.1 # to lock the eyes for low confident data
+            Eye0.location[1] = 15 * 0.1
+            Eye0.location[2] = -20 * 0.1
 
             Eye0.rotation_euler[0] = -Eye0_dataDict["gaze_normal0_x"]
             Eye0.rotation_euler[1] = Eye0_dataDict["gaze_normal0_y"] ##
@@ -484,11 +489,14 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
         eye1_pupil_timestamp=0
         if (Eyes_best_data[1] != None):
             Eye1_dataDict = frameDictListsByWorldIndex[frame_index][Eyes_best_data[1]]
-            Eye1.location[0] = Eye1_dataDict["eye_center1_3d_x"] * 0.1
-            Eye1.location[1] = Eye1_dataDict["eye_center1_3d_y"] * 0.1
-            Eye1.location[2] = Eye1_dataDict["eye_center1_3d_z"] * 0.1
+            # Eye1.location[0] = Eye1_dataDict["eye_center1_3d_x"] * 0.1
+            # Eye1.location[1] = Eye1_dataDict["eye_center1_3d_y"] * 0.1
+            # Eye1.location[2] = Eye1_dataDict["eye_center1_3d_z"] * 0.1
+            Eye1.location[0] = -40 * 0.1
+            Eye1.location[1] = 15 * 0.1
+            Eye1.location[2] = -20 * 0.1
 
-            Eye1.rotation_euler[0] = -Eye1_dataDict["gaze_normal1_x"]
+            Eye1.rotation_euler[0] = Eye1_dataDict["gaze_normal1_x"]
             Eye1.rotation_euler[1] = Eye1_dataDict["gaze_normal1_y"]
             Eye1.rotation_euler[2] = Eye1_dataDict["gaze_normal1_z"]
 
@@ -811,12 +819,23 @@ def ObserveRender():
     '''
     Render with an additional observe camera
     '''
-
-    add_view_vector() # 
+    if Loaded_file_flag == False:
+        add_view_vector() # 
 
     ObserveCameraSetting()
     ob_camera.location = parameters["OB_CAMERA_LOCATION"]
     ob_camera.rotation_euler = [math.radians(parameters["OB_CAMERA_ROTATION_EULER"]), 0, 0]
+
+    # set eyeballs to be transparent
+    Eye0 = bpy.data.objects["Eye.Wetness"]
+    Eye1 = bpy.data.objects["Eye.Wetness.001"]
+    hideObjectHierarchy(Eye0)
+    hideObjectHierarchy(Eye1)
+    bpy.data.objects["EyeWet.002"].hide_render = False
+    bpy.data.objects["EyeWet.001"].hide_render = False
+    bpy.data.objects["Gaze_Indicator"].hide_render = False
+    bpy.data.objects["Gaze_Indicator.001"].hide_render = False
+    
 
     RenderDeviceSetting()
 
@@ -924,24 +943,31 @@ def RenderPlanner(frameDictListsByWorldIndex):
         RenderImageSequence()
         CreateSyncedVideo(frameDictListsByWorldIndex)
     elif render_mode == "observe":
+        # Testing: also render forward vector.
+        calculateForwardVector()
         ObserveRender()
+
 
 def ObserveCameraSetting():
     '''
     Add an extra observe camera for rendering
     '''
     global ob_camera
-    bpy.ops.object.camera_add(
+    ob_camera_exist = bool(bpy.data.collections['Collection'].objects.get('ObCamera'))
+    if ob_camera_exist:
+        ob_camera = bpy.data.objects["ObCamera"]
+    else:
+        bpy.ops.object.camera_add(
         enter_editmode=False, 
         align='VIEW', 
         location=(0, 0, 0), 
         rotation=(math.radians(parameters["OB_CAMERA_ROTATION"]), 0, 0), 
         scale=(0.01, 0.01, 0.01)
         )
-    ob_camera = bpy.data.objects["Camera"]
-    ob_camera.name = "ObCamera"
-    ob_camera.data.lens_unit = 'FOV'
-    ob_camera.data.angle = math.radians(parameters["OB_CAMERA_ANGLE"])
+        ob_camera = bpy.data.objects["Camera"]
+        ob_camera.name = "ObCamera"
+        ob_camera.data.lens_unit = 'FOV'
+        ob_camera.data.angle = math.radians(parameters["OB_CAMERA_ANGLE"])
 
 def setHeadModel():
     '''
@@ -991,7 +1017,7 @@ def SetVideoPlane():
     video_plane.scale[0] = half_width
     video_plane.scale[1] = half_width * parameters["VIDEO_PLANE_RATIO"]
     video_plane.location[2] = dist # testing value
-    video_plane.rotation_euler[2] = 3.14159
+    video_plane.rotation_euler = [0, 3.14159, 3.14159] # video_plane position
 
     # set up video material
     bpy.ops.material.new() # create new material
@@ -1040,6 +1066,7 @@ def SpawnGazeObject():
         )
     gaze_object = bpy.data.objects['Sphere']
     gaze_object.name = "Gaze_object"
+    gaze_object.scale = [parameters["GAZE_OBJECT_SCALE"], parameters["GAZE_OBJECT_SCALE"], parameters["GAZE_OBJECT_SCALE"]]
 
     gaze_object_mat = bpy.data.materials.new("GazeObjectMat")
     gaze_object_mat.diffuse_color = parameters["GAZE_OBJECT_DIFFUSE_COLOR"]
@@ -1068,7 +1095,7 @@ def SetGazeObject(frame_index:int, video_plane, gaze_object, norm_X:float, norm_
     gaze_posY = origin_y - norm_Y * dimension_y
     gaze_posZ = center_z
 
-    gaze_object.location[0] = gaze_posX
+    gaze_object.location[0] = -gaze_posX
     gaze_object.location[1] = gaze_posY
     gaze_object.location[2] = gaze_posZ
 
@@ -1210,13 +1237,21 @@ def SetHightFrameRateAnimation(mode):
                 Eye0_TimeStamp_FrameIndex_table[frame_index] = value
                 # Set Eye Animation
                 try:
-                    Eye0.location[0] = this_dict["eye_center0_3d_x"] * 0.1
-                    Eye0.location[1] = this_dict["eye_center0_3d_y"] * 0.1
-                    Eye0.location[2] = this_dict["eye_center0_3d_z"] * 0.1
+                    # Eye0.location[0] = this_dict["eye_center0_3d_x"] * 0.1
+                    # Eye0.location[1] = this_dict["eye_center0_3d_y"] * 0.1
+                    # Eye0.location[2] = this_dict["eye_center0_3d_z"] * 0.1
+                    Eye0.location[0] = 20 * 0.1 # to lock the eyes for low confident data
+                    Eye0.location[1] = 15 * 0.1
+                    Eye0.location[2] = -20 * 0.1
+
+                    # calculate rotation in spherical coordinates
+                    gaze_normal = [this_dict["gaze_normal0_x"], this_dict["gaze_normal0_y"], this_dict["gaze_normal0_z"]]
+                    spherical_rotation = directionVectorToSpherical(gaze_normal)
+                    elevation = spherical_rotation[0]
+                    azimuth = spherical_rotation[1]
                     
-                    Eye0.rotation_euler[0] = -this_dict["gaze_normal0_x"]
-                    Eye0.rotation_euler[1] = this_dict["gaze_normal0_y"]
-                    Eye0.rotation_euler[2] = this_dict["gaze_normal0_z"]
+                    Eye0.rotation_euler = [-azimuth, elevation, 0]
+                    
                 except:
                     pass
                 Eye0.keyframe_insert(data_path="location", frame=frame_index)
@@ -1233,12 +1268,20 @@ def SetHightFrameRateAnimation(mode):
             elif key == 1 and (frame_index not in Eye1_TimeStamp_FrameIndex_table):
                 Eye1_TimeStamp_FrameIndex_table[frame_index] = value
                 try:
-                    Eye1.location[0] = this_dict["eye_center1_3d_x"] * 0.1
-                    Eye1.location[1] = this_dict["eye_center1_3d_y"] * 0.1
-                    Eye1.location[2] = this_dict["eye_center1_3d_z"] * 0.1
-                    Eye1.rotation_euler[0] = -this_dict["gaze_normal1_x"]
-                    Eye1.rotation_euler[1] = this_dict["gaze_normal1_y"]
-                    Eye1.rotation_euler[2] = this_dict["gaze_normal1_z"]
+                    # Eye1.location[0] = this_dict["eye_center1_3d_x"] * 0.1
+                    # Eye1.location[1] = this_dict["eye_center1_3d_y"] * 0.1
+                    # Eye1.location[2] = this_dict["eye_center1_3d_z"] * 0.1
+                    Eye1.location[0] = -40 * 0.1
+                    Eye1.location[1] = 15 * 0.1
+                    Eye1.location[2] = -20 * 0.1
+
+                    # calculate rotation in spherical coordinates
+                    gaze_normal = [this_dict["gaze_normal1_x"], this_dict["gaze_normal1_y"], this_dict["gaze_normal1_z"]]
+                    spherical_rotation = directionVectorToSpherical(gaze_normal)
+                    elevation = spherical_rotation[0]
+                    azimuth = spherical_rotation[1]
+
+                    Eye1.rotation_euler = [-azimuth, elevation, 0]
                 except:
                     pass
                 Eye1.keyframe_insert(data_path="location", frame=frame_index)
@@ -1356,6 +1399,87 @@ def RenderRandomFeatures():
             RenderSingleFrame(start_frame, os.path.join(os.getcwd(), output_folder, random_parameters_folder, str(person_idx), str(trial_idx),
                                      "a_{:.3f}_s_{:.3f}_dof_none.tiff".format(ambient, specularity)))
 
+# Find the forward vector of this data set
+def calculateForwardVector():
+    # Try to read RITEyes_render_info.json from data directory
+    render_info_filepath = os.path.join(data_directory, "RITEyes_render_info.json")
+    if os.path.exists(render_info_filepath) :
+        # file exist, calculate forward vector
+        print("Found Render Info File, Calculating forward vector")
+        render_info_file = open(render_info_filepath)
+        render_info = json.load(render_info_file)
+        forward_calib_start = render_info["calibration_forward_start"]
+        forward_calib_end   = render_info["calibration_forward_end"]
+
+        # select data rows by world index
+        in_period_row_df = gaze_data.loc[
+            (gaze_data["world_index"] >= forward_calib_start) & 
+            (gaze_data["world_index"] <= forward_calib_end)
+            ]
+        gaze_point_x = in_period_row_df["gaze_point_3d_x"].median()
+        gaze_point_y = in_period_row_df["gaze_point_3d_y"].median()
+        gaze_point_z = in_period_row_df["gaze_point_3d_z"].median()
+
+        # convert to spherical coordinate
+        azimuth = np.arctan(gaze_point_x / gaze_point_z)
+        elevation = np.arctan(gaze_point_y / gaze_point_z)
+
+        
+        addForwardVector([azimuth, elevation])
+        
+    else:
+        # file does not exist, print and pass
+        print("Render Info File is not detected in the data directory, skip forward vector")
+
+# creat two vectors hat 
+def addForwardVector(gaze_median_spherical):
+    # To do detect if this vector has been created
+    
+    forward_exist = bool(bpy.data.collections['Collection'].objects.get('Forward_Vector_0'))
+    if forward_exist == True:
+        print("Forward vector found, skip generation")
+        return
+    else:
+        print("Forward Vector not found, generating..")
+
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=8, 
+        radius=0.1, 
+        depth=200, 
+        enter_editmode=False, 
+        align='WORLD', 
+        location=(0, 0, 100), 
+        scale=(1, 1, 1)
+    )
+    forward_vector_0 = bpy.data.objects['Cylinder']
+    forward_vector_0.name = "Forward_Vector_0"
+
+    bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
+    bpy.ops.object.select_all(action="DESELECT")
+
+    forward_vector_mat = bpy.data.materials.new("ForwardVectorMat")
+    forward_vector_mat.diffuse_color = [0, 0, 1, 1]
+    forward_vector_0.data.materials.append(forward_vector_mat)
+    forward_vector_0.active_material_index = len(forward_vector_0.data.materials) - 1
+
+    forward_vector_0.location = [0, 0, 0]
+    forward_vector_0.rotation_euler = [gaze_median_spherical[1],gaze_median_spherical[0], 0]
+
+
+    bpy.ops.object.select_all(action="DESELECT")
+    
+def directionVectorToSpherical(normal_vector):
+    x = normal_vector[0]
+    y = normal_vector[1]
+    z = normal_vector[2]
+
+    elevation = np.arctan(x / z)
+    azimuth = np.arctan(y / z)
+
+    return [elevation, azimuth]
+
+
 ## Blender Opertaion Functions Ends ##
 
 ####=============================####
@@ -1463,6 +1587,7 @@ if not os.path.isfile(stagepath) or force_overload:
 else:
     if args.model_id != 0:
         bpy.ops.wm.open_mainfile(filepath=stagepath)
+        Loaded_file_flag = True
 
     # Get Cameras
     GetCameras()
@@ -1471,14 +1596,14 @@ else:
 LoadEyeTextures()
 ## Material Setting Ends	##
 
-# bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Start 	##
-# RenderPlanner(frameDictListsByWorldIndex)
-RenderRandomFeatures()
+RenderPlanner(frameDictListsByWorldIndex)
+#RenderRandomFeatures()
 
 # save again after rendering setup
-# bpy.ops.wm.save_as_mainfile(filepath=stagepath)
+bpy.ops.wm.save_as_mainfile(filepath=stagepath)
 
 ## Rendering Ends 	##
 
