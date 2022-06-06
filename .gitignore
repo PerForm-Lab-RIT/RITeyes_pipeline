@@ -130,5 +130,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
 BinocularSystemParameters.json
 stage_files/

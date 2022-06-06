@@ -526,13 +526,19 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
                 normX = Eye1Gaze_dataDict["norm_pos_x"]
                 normY = Eye1Gaze_dataDict["norm_pos_y"]
                 confidence = Eye1Gaze_dataDict["confidence"]
-            SetGazeObject(
-                frame_index,
-                video_plane,
-                gaze_object,
-                normX,
-                normY
-            )
+            # SetGazeObject(
+            #     frame_index,
+            #     video_plane,
+            #     gaze_object,
+            #     normX,
+            #     normY
+            # )
+
+            x = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_x"]
+            y = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_y"]
+            z = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_z"]
+
+            SetGazeObjectin3D(frame_index, video_plane, gaze_object, x, y, z)
             SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
         except:
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
@@ -1075,6 +1081,16 @@ def SpawnGazeObject():
 
     return gaze_object
 
+def SetGazeObjectin3D(frame_index:int, video_plane, gaze_object, x:float, y:float, z:float):
+    '''
+    using x, y and z from gaze data to set a gaze indicator with an object
+    '''
+
+    gaze_object.location[0] = x
+    gaze_object.location[1] = y
+    gaze_object.location[2] = z
+
+    gaze_object.keyframe_insert(data_path="location", frame=frame_index)
 
 def SetGazeObject(frame_index:int, video_plane, gaze_object, norm_X:float, norm_Y:float):
     '''
