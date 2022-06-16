@@ -105,17 +105,23 @@ random_parameters_folder = "random_parameters"
 
 # Json Parameters
 parameters_json_path = "BinocularSystemParameters.json"
-def readJsonParameters():
+filespath_json_path = "FilePaths.json"
+
+def readJsonParameters(json_path, parameter):
     '''
     Read a json for parameters 
     '''
-    global parameters
-    with open(parameters_json_path) as json_file:
+    with open(json_path) as json_file:
         json_str = json_file.read()
-        parameters = json.loads(json_str)
+        parameter = json.loads(json_str)
+    return parameter
+    
 
 parameters = None
-readJsonParameters()
+file_paths = None
+
+parameters = readJsonParameters(parameters_json_path, parameters)
+file_paths = readJsonParameters(filespath_json_path, file_paths)
 
 
 ## Global Varaiables Ends   ##
@@ -127,7 +133,7 @@ isBlenderProcess = False
 #blender_path = "/media/renderings/New Volume/RITEyes/blender-2.93.3-linux-x64/blender"
 
 ## Try to read
-blender_path = parameters["BLENDER_PATH"]
+blender_path = file_paths["BLENDER_PATH"]
 
 try:
     import bpy
@@ -173,7 +179,7 @@ def getDataPath():
     Path save to default_data_path
     """
     global default_data_path
-    default_data_path = parameters["DATA_PATH"]
+    default_data_path = file_paths["DATA_PATH"]
 
 def readGazeData(data_directory:str) -> None:
     global gaze_data
@@ -1508,7 +1514,12 @@ data_directory = os.path.join(default_data_path, str(person_idx), str(trial_idx)
 readGazeData(data_directory)
 readPupilData(data_directory)
 readHeadInfo()
-readJsonParameters()
+parameters = None
+file_paths = None
+
+parameters = readJsonParameters(parameters_json_path, parameters)
+file_paths = readJsonParameters(filespath_json_path, file_paths)
+
 
 ## Data Processing ##
 

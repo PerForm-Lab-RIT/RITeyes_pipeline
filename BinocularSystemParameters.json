@@ -1,8 +1,4 @@
 {
-	"orginial_BLENDER_PATH" : "D:/Softwares/Blender/blender.exe",
-	"BLENDER_PATH" : "D:/Softwares/Blender/blender.exe",
-	"original_DATA_PATH" : "E:/RITEyes/Raw_Data",
-	"DATA_PATH": "E:/RITEyes/Raw_Data",
 	"VIEW_VECTOR_VERTICES" : 8,
 	"VIEW_VECTOR_RADIUS" : 0.1,
 	"VIEW_VECTOR_LENGTH" : 200,

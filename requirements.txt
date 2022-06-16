@@ -3,4 +3,5 @@ argparse
 xlrd
 mathutils
 bpy
-
+pandas
+msgpack
