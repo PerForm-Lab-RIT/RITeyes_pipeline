@@ -95,6 +95,7 @@ head = None
 video_plane = None
 video_material = None
 gaze_object = None
+gaze_object_3d = None # the gaze object which uses norm_pos in 3d space
 
 # Render Variables
 device_type = 'CUDA'
@@ -526,19 +527,23 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
                 normX = Eye1Gaze_dataDict["norm_pos_x"]
                 normY = Eye1Gaze_dataDict["norm_pos_y"]
                 confidence = Eye1Gaze_dataDict["confidence"]
-            # SetGazeObject(
-            #     frame_index,
-            #     video_plane,
-            #     gaze_object,
-            #     normX,
-            #     normY
-            # )
 
-            x = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_x"]
-            y = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_y"]
-            z = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_z"]
+            # set 2d gaze object
+            SetGazeObject(
+                frame_index,
+                video_plane,
+                gaze_object,
+                normX,
+                normY
+            )
 
-            SetGazeObjectin3D(frame_index, video_plane, gaze_object, x, y, z)
+            # convert to milimeters
+            # Set 3d gaze object
+            x = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_x"] * 0.1
+            y = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_y"] * 0.1
+            z = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_z"] * 0.1
+            SetGazeObjectin3D(frame_index, video_plane, gaze_object_3d, x, y, z)
+
             SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
         except:
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
@@ -1059,7 +1064,7 @@ def SetVideoPlane():
 
     return video_plane
 
-def SpawnGazeObject():
+def SpawnGazeObject(gaze_object, color, name, mat_name):
     '''
     Add a blue sphere object to indicate the position the eyes are gazing on the video plane.
     '''
@@ -1071,11 +1076,15 @@ def SpawnGazeObject():
             scale=(1, 1, 1)
         )
     gaze_object = bpy.data.objects['Sphere']
-    gaze_object.name = "Gaze_object"
+    #gaze_object.name = "Gaze_object"
+    gaze_object.name = name
+    
     gaze_object.scale = [parameters["GAZE_OBJECT_SCALE"], parameters["GAZE_OBJECT_SCALE"], parameters["GAZE_OBJECT_SCALE"]]
 
     gaze_object_mat = bpy.data.materials.new("GazeObjectMat")
-    gaze_object_mat.diffuse_color = parameters["GAZE_OBJECT_DIFFUSE_COLOR"]
+    gaze_object_mat.name = mat_name
+    #gaze_object_mat.diffuse_color = parameters["GAZE_OBJECT_DIFFUSE_COLOR"]
+    gaze_object_mat.diffuse_color = color
     gaze_object.data.materials.append(gaze_object_mat)
     gaze_object.active_material_index = len(gaze_object.data.materials) - 1
 
@@ -1335,6 +1344,11 @@ def SetHightFrameRateAnimation(mode):
                 normY
             )
             SetGazeObjectColorByConfidence(gaze_object, confidence, this_frame_index)
+
+            x = this_dict["gaze_point_3d_x"] * 0.1
+            y = this_dict["gaze_point_3d_y"] * 0.1
+            z = this_dict["gaze_point_3d_z"] * 0.1
+            SetGazeObjectin3D(frame_index, video_plane, gaze_object_3d, x, y, z)
         except:
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
 
@@ -1573,7 +1587,18 @@ if not os.path.isfile(stagepath) or force_overload:
     video_plane = SetVideoPlane()
 
     # Add Gaze Object to the scene
-    gaze_object = SpawnGazeObject()
+    gaze_object = SpawnGazeObject(
+        gaze_object, 
+        parameters["GAZE_OBJECT_DIFFUSE_COLOR"],
+        "Gaze_object",
+        "GazeObjectMat"
+        )
+    gaze_object_3d = SpawnGazeObject(
+        gaze_object_3d, 
+        [0, 0, 1, 1],
+        "Gaze_object_3d",
+        "GazeObjectMat_3d"
+        ) # temporarily set it here
 
     # Position two Eyes, Revising, To be finished
     if highfps_mode == True:
