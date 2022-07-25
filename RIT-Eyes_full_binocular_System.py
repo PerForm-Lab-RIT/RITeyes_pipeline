@@ -4,6 +4,7 @@ Script for constructing full binocular system for RIT-Eyes
 @author: Chengyi Ma
 '''
 from ast import Num
+from glob import glob
 import os
 import sys
 #sys.path.append("C:\\Users\\mcy13\\anaconda3\\envs\\RITEyes\\Lib")
@@ -66,6 +67,9 @@ pupil_data_dict = {}
 scene_camera_intrinsics_matrix_json = None
 scene_camera_intrinsics_matrix:np.ndarray = None
 
+gaze_offset_2d_x = 0 # normalized 2d offset for the gaze object
+gaze_offset_2d_y = 0
+
 frame_cap = 0 # the last world video frame index
 total_frames = 0 # the total world video's frame number
 start_frame = args.start_frame
@@ -101,6 +105,8 @@ video_plane = None
 video_material = None
 gaze_object = None
 gaze_object_3d = None # the gaze object which uses norm_pos in 3d space
+forward_obj_calib = None
+forward_obj_stats = None
 
 # Render Variables
 device_type = 'CUDA'
@@ -968,6 +974,7 @@ def RenderPlanner(frameDictListsByWorldIndex):
 	elif render_mode == "observe":
 		# Testing: also render forward vector.
 		calculateForwardVector()
+		calculateStatisticalForwardVector()
 		ObserveRender()
 
 
@@ -1171,9 +1178,27 @@ def ReadSceneCameraMatrixFile() -> str:
 		print("scene_camera: ", scene_camera_resolution_str)
 		scene_camera_intrinsics_matrix = scene_camera_intrinsics_matrix_json[scene_camera_resolution_str]["camera_matrix"]
 		print("Loaded world camera intrinsics from file")
+		calculate2DGazeOffset()
 	except Exception as e:
 		#print(e)
 		print("Failed to load world camera intrinsics matrix, using default FOV instead; Error:", e)
+
+def calculate2DGazeOffset() -> None:
+	'''
+	This method is called by ReadSceneCameraMatrixFile. 
+	This function calculates the normalized optical offset for x and y and store them in the two global variables gaze_offset_2d_x and y
+	'''
+	optical_center_x:float = scene_camera_intrinsics_matrix[0][2]
+	optical_center_y:float = scene_camera_intrinsics_matrix[1][2]
+	image_center_x:float = 960
+	image_center_y:float = 540
+	offset_x_pixel = image_center_x - optical_center_x
+	offset_y_pixel = image_center_y - optical_center_y
+	global gaze_offset_2d_x
+	global gaze_offset_2d_y
+	gaze_offset_2d_x = offset_x_pixel / 1920
+	gaze_offset_2d_y = -(offset_y_pixel / 1080)
+	print("Optical center offset normalized: ", gaze_offset_2d_x, gaze_offset_2d_y)
 
 def GetFovFromCameraMatrix(intrinsics_matrix:np.ndarray) -> float:
 	'''
@@ -1391,8 +1416,8 @@ def SetHightFrameRateAnimation(mode):
 
 		# set gaze object animation, independent from Eye data.
 		try:
-			normX = this_dict["norm_pos_x"]
-			normY = this_dict["norm_pos_y"]
+			normX = this_dict["norm_pos_x"] + gaze_offset_2d_x
+			normY = this_dict["norm_pos_y"] + gaze_offset_2d_y
 			confidence = this_dict["confidence"]
 			SetGazeObject(
 				frame_index,
@@ -1504,20 +1529,51 @@ def calculateForwardVector():
 			(gaze_data["world_index"] >= forward_calib_start) & 
 			(gaze_data["world_index"] <= forward_calib_end)
 			]
-		gaze_point_x = in_period_row_df["gaze_point_3d_x"].median()
-		gaze_point_y = in_period_row_df["gaze_point_3d_y"].median()
-		gaze_point_z = in_period_row_df["gaze_point_3d_z"].median()
+		gaze_point_x = in_period_row_df["gaze_point_3d_x"].median() * 0.1
+		gaze_point_y = in_period_row_df["gaze_point_3d_y"].median() * 0.1
+		gaze_point_z = in_period_row_df["gaze_point_3d_z"].median() * 0.1
 
 		# convert to spherical coordinate
 		azimuth = np.arctan(gaze_point_x / gaze_point_z)
 		elevation = np.arctan(gaze_point_y / gaze_point_z)
 
 		
-		addForwardVector([azimuth, elevation])
+		#addForwardVector([azimuth, elevation])
+		global forward_obj_calib
+		forward_obj_calib = SpawnGazeObject(
+			forward_obj_calib,
+			[0.4, 0.2, 0.6, 1], # purple
+			"Forward_object_calib",
+			"Forward_objectMat_calib"
+		)
+		gaze3d_scale = parameters["GAZE_OBJECT3D_SCALE"]
+		forward_obj_calib.scale = [gaze3d_scale, gaze3d_scale, gaze3d_scale]
+		forward_obj_calib.location = [gaze_point_x, gaze_point_y, gaze_point_z]
 		
 	else:
 		# file does not exist, print and pass
 		print("Render Info File is not detected in the data directory, skip forward vector")
+
+def calculateStatisticalForwardVector():
+	gaze_data_filtered = gaze_data.loc[gaze_data["confidence"] > 0.8]
+
+	gaze_point_x_mean = gaze_data_filtered["gaze_point_3d_x"].median() * 0.1
+	gaze_point_y_mean = gaze_data_filtered["gaze_point_3d_y"].median() * 0.1
+	gaze_point_z_mean = gaze_data_filtered["gaze_point_3d_z"].median() * 0.1
+
+	global forward_obj_stats
+	forward_obj_stats = SpawnGazeObject(
+		forward_obj_stats,
+		[0.81, 0.184, 0.46, 1], # pink
+		"Forward_object_stats",
+		"Forward_objectMat_stats"
+	)
+	gaze3d_scale = parameters["GAZE_OBJECT3D_SCALE"]
+	forward_obj_stats.scale = [gaze3d_scale, gaze3d_scale, gaze3d_scale]
+	forward_obj_stats.location = [gaze_point_x_mean, gaze_point_y_mean, gaze_point_z_mean]
+	print("Statistics based forward direction calculated.")
+
+
 
 # creat two vectors hat 
 def addForwardVector(gaze_median_spherical):
