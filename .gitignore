@@ -132,6 +132,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-#FilePaths.json
-stage_files/
 FilePaths.json
+stage_files/

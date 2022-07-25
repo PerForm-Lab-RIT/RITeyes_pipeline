@@ -2,9 +2,11 @@
 Script for constructing full binocular system for RIT-Eyes
 
 @author: Chengyi Ma
+@edited by: Abhijan Wasti
 '''
 from ast import Num
 from glob import glob
+from cmath import isnan
 import os
 import sys
 #sys.path.append("C:\\Users\\mcy13\\anaconda3\\envs\\RITEyes\\Lib")
@@ -112,8 +114,10 @@ forward_obj_stats = None
 device_type = 'CUDA'
 output_folder = "renderings"
 binocular_output_folder = "binocular"
+observation_output_folder = "observation"
 stage_folder = "stage_files"
 random_parameters_folder = "random_parameters"
+use_eevee = True # only for observe mode
 
 # Json Parameters
 parameters_json_path = "BinocularSystemParameters.json"
@@ -555,12 +559,10 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 				normY
 			)
 
-			# convert to milimeters
-			# Set 3d gaze object
-			x = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_x"] * 0.1
-			y = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_y"] * 0.1
-			z = frameDictListsByWorldIndex[frame_index]["gaze_point_3d_z"] * 0.1
-			SetGazeObjectin3D(frame_index, video_plane, gaze_object_3d, x, y, z)
+			SetGazeObjectin3D(frame_index, video_plane, gaze_object, x, y, z)
+			SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
+		except:
+			print("Error: Failed to set Gaze object for low fps, frame_index: ", frame_index)
 
 			SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
 		except:
@@ -622,8 +624,6 @@ def add_view_vector():
 	eye_vector_mat.diffuse_color = parameters["EYE_VECTOR_MAT_COLOR"]
 	eye_vector.data.materials.append(eye_vector_mat)
 	eye_vector.active_material_index = len(eye_vector.data.materials) - 1
-
-
 
 def getFullRotationVector(rod_vector):
 	'''
@@ -799,6 +799,11 @@ def RenderImageSequence():
 	'''
 	s = bpy.context.scene
 
+	if use_eevee:
+		s.render.engine = 'BLENDER_EEVEE'
+	else:
+		s.render.engine = 'CYCLES'
+
 	for i in range(start_frame, end_frame):
 		try:
 			s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
@@ -860,8 +865,26 @@ def ObserveRender():
 	Eye1 = bpy.data.objects["Eye.Wetness.001"]
 	hideObjectHierarchy(Eye0)
 	hideObjectHierarchy(Eye1)
+
 	bpy.data.objects["EyeWet.002"].hide_render = False
 	bpy.data.objects["EyeWet.001"].hide_render = False
+
+	if use_eevee:
+		eye0_mat = bpy.data.materials['Eye wet material.001']
+
+		fresnel = eye0_mat.node_tree.nodes['Fresnel']
+		transparent = eye0_mat.node_tree.nodes['BSDF Transparente']
+		glossy = eye0_mat.node_tree.nodes['BSDF Reflectivo']
+		mix = eye0_mat.node_tree.nodes['Mezclar sombreadores.001']
+		out = eye0_mat.node_tree.nodes['Material']
+
+		eye0_mat.node_tree.links.new(mix.inputs[0], fresnel.outputs[0])
+		eye0_mat.node_tree.links.new(mix.inputs[1], transparent.outputs[0])
+		eye0_mat.node_tree.links.new(mix.inputs[2], glossy.outputs[0])
+		eye0_mat.node_tree.links.new(out.inputs[0], mix.outputs[0])
+
+		eye0_mat.blend_method = 'BLEND'
+
 	bpy.data.objects["Gaze_Indicator"].hide_render = False
 	bpy.data.objects["Gaze_Indicator.001"].hide_render = False
 	
@@ -878,6 +901,11 @@ def ObserveRender():
 	s.cycles.device = parameters["RENDER_DEVICE"]
 	s.render.image_settings.file_format = parameters["RENDER_FORMAT"]
 
+	if use_eevee:
+		s.render.engine = 'BLENDER_EEVEE'
+	else:
+		s.render.engine = 'CYCLES'
+
 	for i in range(start_frame, end_frame):
 		try:
 			s.node_tree.links.new(s.node_tree.nodes["Render Layers"].outputs['Image'],
@@ -887,7 +915,7 @@ def ObserveRender():
 
 		frame = i
 		s.frame_current = frame
-		filename = os.path.join(os.getcwd(), output_folder, binocular_output_folder, str(person_idx), str(trial_idx), "Observation",
+		filename = os.path.join(os.getcwd(), output_folder, observation_output_folder, str(person_idx), str(trial_idx),
 								str(s.frame_current).zfill(4) + ".tif")
 		if os.path.isfile(filename):
 			print("skipped ", filename)
@@ -1284,11 +1312,50 @@ def SetFirstTimeStamp():
 def CalculateFrameIndexByTimeStamp(timestamp):
 	global first_timestamp
 
+	print('Current timestamp: ', timestamp, '| First timestamp: ', first_timestamp)
+
 	delta = round(timestamp - first_timestamp, 6)
-	frame_index = round(delta / 0.0084, 6)
-	frame_index = int(frame_index)
+	frame_index = int(round(delta / 0.0084))
 
 	return frame_index
+
+def ReturnFrameIndexAndInfluence(timestamp, next_timestamp):
+	# Input: two timestamp, the current and the next timestamp
+	# Output: current frame_index in Blender and an "influence" value
+	#
+	# This function takes in two consecutive timestamps and generates the next closet frame index for blender to keyframe
+	# It also returns an influence value that tells us where this frame index lies between the two timestamps
+	# For example, if the frame index lies exactly in between the two timestamps, influence would be 0.5
+
+	global first_timestamp
+
+	raw_frame_index = (timestamp - first_timestamp) / 0.0084
+
+	frame_index = int(round(raw_frame_index))
+	influence = 0
+	if next_timestamp != timestamp:
+		influence = ( frame_index - raw_frame_index ) * 0.0084 / ((next_timestamp - timestamp))
+
+	return frame_index, influence
+
+def ReturnInterpolatedByInfluence(start_val, end_val, influence, type='linear'):
+	# Interpolates between two given values based on an influence value
+	# Optional argument type determines which interpolation method to use
+
+	# For example, for start_val = 0, end_val = 2, influence = 0.5 and type = 'linear', returns 1 (as 1 is mid way between 0 and 2)
+	# More interpolation techniques here: http://paulbourke.net/miscellaneous/interpolation/
+
+	if isnan(start_val) or isnan(end_val) or isnan(influence):
+		print('Nan detected for', start_val, end_val, influence)
+
+	if type == 'linear':
+		interp = start_val * (1-influence) + end_val * influence
+		return interp
+	
+	elif type == 'cosine':
+		alpha = (1 - np.cos(influence * np.pi)) / 2
+		interp =  start_val * (1 - alpha) + end_val * alpha
+		return interp
 
 def PrintPercentageProgress(index, all, next_report):
 	progress = round(index / all, 2)
@@ -1299,7 +1366,6 @@ def PrintPercentageProgress(index, all, next_report):
 		print("Next report: ", next_report)
 	return next_report
 
-
 def SetHightFrameRateAnimation(mode):
 	'''
 	Set a higher frame rate animation with all gaze data
@@ -1309,12 +1375,19 @@ def SetHightFrameRateAnimation(mode):
 	global gaze_data_dictList, Eye0_TimeStamp_FrameIndex_table, Eye1_TimeStamp_FrameIndex_table, TimeStamp_record_table
 	world_frame_offset = 0
 	next_report = 0
+
+	# Generate a lookup file for real-sync video
+	lookup = []
+	lookup.append(np.array(['frame_index', 'gaze_timestamp', 'eye0_timestamp', 'eye1_timestamp', 'world_index']))
 	
-	# First, know the beginning timestamp.
+	 # First, know the beginning timestamp.
 	SetFirstTimeStamp()
-	# Loop through data list, 
-	for i in range(0, len(gaze_data_dictList)):
-	#for i in range(0, 6000): # for debug set loop to a smaller value
+
+	first_world_index = gaze_data_dictList[0]['world_index']
+	# Loop through data list,
+	len_gaze_data_dictList = len(gaze_data_dictList) 
+	for i in range(0, len_gaze_data_dictList-1):
+	# for i in range(40000, 60000): # for debug set loop to a smaller value
 
 		# loading bar
 		loading_bar = 'Processing: ['
@@ -1323,13 +1396,20 @@ def SetHightFrameRateAnimation(mode):
 				loading_bar += '#'
 			else:
 				loading_bar += ' '
-		loading_bar += '] ' + str(i) + ' of ' +  str(len(gaze_data_dictList))
+		loading_bar += '] ' + str(round(100 * i/len_gaze_data_dictList, 2)) + '% | (' + str(i) + ' of ' +  str(len_gaze_data_dictList) + ')'
 		print(loading_bar,end='\r')
 
 		this_dict = gaze_data_dictList[i]
+		next_dict = gaze_data_dictList[i+1]
+
 		base_data = GetBaseData(this_dict["base_data"])
 		this_timestamp = this_dict["gaze_timestamp"]
-		this_frame_index = CalculateFrameIndexByTimeStamp(this_timestamp)
+		next_timestamp = next_dict["gaze_timestamp"]
+
+		# print('this_timestamp: ', this_timestamp, 'next_timestamp: ', next_timestamp)
+
+		this_frame_index, _ = ReturnFrameIndexAndInfluence(this_timestamp, next_timestamp)
+		# this_frame_index = CalculateFrameIndexByTimeStamp(this_timestamp)
 
 		# Check if this datum is repetitive
 		if this_frame_index in TimeStamp_record_table:
@@ -1339,7 +1419,9 @@ def SetHightFrameRateAnimation(mode):
 
 		# Loop, so that it could set for 1 eye or 2 eyes.
 		for key, value in base_data.items():
-			frame_index = CalculateFrameIndexByTimeStamp(value)
+			# frame_index = CalculateFrameIndexByTimeStamp(value)
+			frame_index, influence = ReturnFrameIndexAndInfluence(this_timestamp, next_timestamp)
+
 			# Set Eye0
 			if key == 0 and (frame_index not in Eye0_TimeStamp_FrameIndex_table):
 				Eye0_TimeStamp_FrameIndex_table[frame_index] = value
@@ -1353,7 +1435,23 @@ def SetHightFrameRateAnimation(mode):
 					Eye0.location[2] = -20 * 0.1
 
 					# calculate rotation in spherical coordinates
-					gaze_normal = [this_dict["gaze_normal0_x"], this_dict["gaze_normal0_y"], this_dict["gaze_normal0_z"]]
+					# gaze_normal = [this_dict["gaze_normal0_x"], this_dict["gaze_normal0_y"], this_dict["gaze_normal0_z"]]
+
+					curr_gaze_normal_x = this_dict["gaze_normal0_x"]
+					curr_gaze_normal_y = this_dict["gaze_normal0_y"]
+					curr_gaze_normal_z = this_dict["gaze_normal0_z"]
+
+					next_gaze_normal_x = next_dict["gaze_normal0_x"]
+					next_gaze_normal_y = next_dict["gaze_normal0_y"]
+					next_gaze_normal_z = next_dict["gaze_normal0_z"]
+
+					if (isnan(next_gaze_normal_x) or isnan(next_gaze_normal_y) or isnan(next_gaze_normal_z)):
+						gaze_normal = [curr_gaze_normal_x, curr_gaze_normal_y, curr_gaze_normal_z]
+					else:
+						gaze_normal = [ReturnInterpolatedByInfluence(curr_gaze_normal_x, next_gaze_normal_x, influence),
+										ReturnInterpolatedByInfluence(curr_gaze_normal_y, next_gaze_normal_y, influence),
+										ReturnInterpolatedByInfluence(curr_gaze_normal_z, next_gaze_normal_z, influence)]
+
 					spherical_rotation = directionVectorToSpherical(gaze_normal)
 					elevation = spherical_rotation[0]
 					azimuth = spherical_rotation[1]
@@ -1361,6 +1459,7 @@ def SetHightFrameRateAnimation(mode):
 					Eye0.rotation_euler = [-azimuth, elevation, 0]
 					
 				except:
+					print('Keyframing failed pos and normal')
 					pass
 				Eye0.keyframe_insert(data_path="location", frame=frame_index)
 				Eye0.keyframe_insert(data_path="rotation_euler", frame=frame_index)
@@ -1384,13 +1483,30 @@ def SetHightFrameRateAnimation(mode):
 					Eye1.location[2] = -20 * 0.1
 
 					# calculate rotation in spherical coordinates
-					gaze_normal = [this_dict["gaze_normal1_x"], this_dict["gaze_normal1_y"], this_dict["gaze_normal1_z"]]
+					# gaze_normal = [this_dict["gaze_normal1_x"], this_dict["gaze_normal1_y"], this_dict["gaze_normal1_z"]]
+
+					curr_gaze_normal_x = this_dict["gaze_normal1_x"]
+					curr_gaze_normal_y = this_dict["gaze_normal1_y"]
+					curr_gaze_normal_z = this_dict["gaze_normal1_z"]
+
+					next_gaze_normal_x = next_dict["gaze_normal1_x"]
+					next_gaze_normal_y = next_dict["gaze_normal1_y"]
+					next_gaze_normal_z = next_dict["gaze_normal1_z"]
+
+					if (isnan(next_gaze_normal_x) or isnan(next_gaze_normal_y) or isnan(next_gaze_normal_z)):
+						gaze_normal = [curr_gaze_normal_x, curr_gaze_normal_y, curr_gaze_normal_z]
+					else:
+						gaze_normal = [ReturnInterpolatedByInfluence(curr_gaze_normal_x, next_gaze_normal_x, influence),
+										ReturnInterpolatedByInfluence(curr_gaze_normal_y, next_gaze_normal_y, influence),
+										ReturnInterpolatedByInfluence(curr_gaze_normal_z, next_gaze_normal_z, influence)]
+
 					spherical_rotation = directionVectorToSpherical(gaze_normal)
 					elevation = spherical_rotation[0]
 					azimuth = spherical_rotation[1]
 
 					Eye1.rotation_euler = [-azimuth, elevation, 0]
 				except:
+					print('Keyframing failed pos and normal')
 					pass
 				Eye1.keyframe_insert(data_path="location", frame=frame_index)
 				Eye1.keyframe_insert(data_path="rotation_euler", frame=frame_index)
@@ -1405,8 +1521,10 @@ def SetHightFrameRateAnimation(mode):
 		# set video plane's offset
 		try:
 			world_index = this_dict["world_index"]
-			this_world_frame_index = int(this_frame_index/4)
-			world_frame_offset = -(this_frame_index - this_world_frame_index)
+			# this_world_frame_index = int(this_frame_index/4)
+			this_world_frame_index = world_index
+			# world_frame_offset = -(this_frame_index - this_world_frame_index)
+			world_frame_offset = -(frame_cap - this_world_frame_index - first_world_index)
 			video_material.node_tree.nodes["Image Texture"].image_user.frame_offset = world_frame_offset
 			video_material.node_tree.nodes["Image Texture"].image_user.keyframe_insert(data_path="frame_offset", frame = this_frame_index)
 		except Exception as e_msg:
@@ -1416,26 +1534,47 @@ def SetHightFrameRateAnimation(mode):
 
 		# set gaze object animation, independent from Eye data.
 		try:
-			normX = this_dict["norm_pos_x"] + gaze_offset_2d_x
-			normY = this_dict["norm_pos_y"] + gaze_offset_2d_y
+			normX = this_dict["norm_pos_x"]
+			normY = this_dict["norm_pos_y"]
 			confidence = this_dict["confidence"]
 			SetGazeObject(
-				frame_index,
+				this_frame_index,
 				video_plane,
 				gaze_object,
 				normX,
 				normY
 			)
 			SetGazeObjectColorByConfidence(gaze_object, confidence, this_frame_index)
-
-			x = this_dict["gaze_point_3d_x"] * 0.1
-			y = this_dict["gaze_point_3d_y"] * 0.1
-			z = this_dict["gaze_point_3d_z"] * 0.1
-			SetGazeObjectin3D(frame_index, video_plane, gaze_object_3d, x, y, z)
 		except:
 			print("Error: Failed to set Gaze object, frame_index: ", frame_index)
 
+		# Generate a lookup file that has the eye0, eye1 and world timestamp for each frame index in Blender
+		lookup_row = []
+		# Frame Number
+		lookup_row.append(int(this_frame_index))
+		# Gaze timestamp
+		lookup_row.append(this_timestamp)
+		# Eye0 timestamp
+		if 0 in base_data:
+			lookup_row.append(base_data[0])
+		else:
+			lookup_row.append(0)
+		# Eye1 timestamp
+		if 1 in base_data:
+			lookup_row.append(base_data[1])
+		else:
+			lookup_row.append(0)
+		# World Index
+		lookup_row.append(int(world_index))
 
+		lookup.append(lookup_row)
+
+	# Save lookup file
+	dirname = os.path.join(os.getcwd(), output_folder, str(person_idx), str(trial_idx))
+	if not os.path.exists(dirname):
+		os.makedirs(dirname)
+	filename = os.path.join(dirname, "blender_lookup.npy")
+	np.save(filename, lookup)
 	return None
 
 def IndividualEyeRandom(start_frame, ambient, specularity, dof):
@@ -1644,6 +1783,7 @@ parameters = readJsonParameters(parameters_json_path, parameters)
 file_paths = readJsonParameters(filespath_json_path, file_paths)
 
 ReadSceneCameraMatrixFile()
+SetFirstTimeStamp()
 
 ## Data Processing ##
 
@@ -1662,8 +1802,11 @@ if not os.path.isfile(stagepath) or force_overload:
 		frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
 		total_frames = len(frameDictListsByWorldIndex)
 	else:
-		frame_cap = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
-		total_frames = frame_cap
+		frame_cap = int(frameDictListsByWorldIndex[-1][-1]["world_index"])
+		total_frames = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
+		
+		# frame_cap = CalculateFrameIndexByTimeStamp(gaze_data_dictList[-1]["gaze_timestamp"])
+		# total_frames = frame_cap
 	print("Total world frames in this video: ", total_frames)
 	print("Framecap: ", frame_cap)
 	camera_matrices = readCalibData() # get camera pos and rotation information
