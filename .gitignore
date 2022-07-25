@@ -10,6 +10,7 @@ __pycache__/
 blender_path.txt
 data_path.txt
 Stage*
+FilePaths.json
 
 # renderings
 *renderings/
