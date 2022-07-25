@@ -565,8 +565,7 @@ def setUpGazeAnimationFrames(frameCount:int, Eye0, Eye1, frameDictListsByWorldIn
 			print("Error: Failed to set Gaze object for low fps, frame_index: ", frame_index)
 
 			SetGazeObjectColorByConfidence(gaze_object, confidence, frame_index)
-		except:
-			print("Error: Failed to set Gaze object, frame_index: ", frame_index)
+		
 
 	print("Completed setting eye frames.")
 
