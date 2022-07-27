@@ -105,6 +105,7 @@ binocular_output_folder = "binocular"
 observation_output_folder = "observation"
 stage_folder = "stage_files"
 random_parameters_folder = "random_parameters"
+lookup_folder = "lookup"
 use_eevee = True # only for observe mode
 
 # Json Parameters
@@ -1301,7 +1302,6 @@ def SetHightFrameRateAnimation(mode):
 
     # Generate a lookup file for real-sync video
     lookup = []
-    lookup.append(np.array(['frame_index', 'gaze_timestamp', 'eye0_timestamp', 'eye1_timestamp', 'world_index']))
     
      # First, know the beginning timestamp.
     SetFirstTimeStamp()
@@ -1319,7 +1319,7 @@ def SetHightFrameRateAnimation(mode):
                 loading_bar += '#'
             else:
                 loading_bar += ' '
-        loading_bar += '] ' + str(round(100 * i/len_gaze_data_dictList, 2)) + '% | (' + str(i) + ' of ' +  str(len_gaze_data_dictList) + ')'
+        loading_bar += '] (' + str(i) + ' of ' +  str(len_gaze_data_dictList) + ') | ' + str(round(100 * i/len_gaze_data_dictList, 2)) + '%'
         print(loading_bar,end='\r')
 
         this_dict = gaze_data_dictList[i]
@@ -1472,6 +1472,7 @@ def SetHightFrameRateAnimation(mode):
             print("Error: Failed to set Gaze object, frame_index: ", frame_index)
 
         # Generate a lookup file that has the eye0, eye1 and world timestamp for each frame index in Blender
+        # Lookup has the format ['frame_index', 'gaze_timestamp', 'eye0_timestamp', 'eye1_timestamp', 'world_index']
         lookup_row = []
         # Frame Number
         lookup_row.append(int(this_frame_index))
@@ -1493,7 +1494,7 @@ def SetHightFrameRateAnimation(mode):
         lookup.append(lookup_row)
 
     # Save lookup file
-    dirname = os.path.join(os.getcwd(), output_folder, str(person_idx), str(trial_idx))
+    dirname = os.path.join(os.getcwd(), output_folder, lookup_folder, str(person_idx), str(trial_idx))
     if not os.path.exists(dirname):
         os.makedirs(dirname)
     filename = os.path.join(dirname, "blender_lookup.npy")

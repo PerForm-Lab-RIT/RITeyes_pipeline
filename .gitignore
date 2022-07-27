@@ -133,3 +133,5 @@ dmypy.json
 
 FilePaths.json
 stage_files/
+
+*.mp4
