@@ -10,6 +10,7 @@ __pycache__/
 blender_path.txt
 data_path.txt
 Stage*
+FilePaths.json
 
 # renderings
 *renderings/
@@ -133,5 +134,8 @@ dmypy.json
 
 FilePaths.json
 stage_files/
+<<<<<<< HEAD
 
 *.mp4
+=======
+>>>>>>> 7b86944fca2fce59e0e1f0d37fb20f9b53110528
